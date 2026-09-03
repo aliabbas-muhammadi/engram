@@ -1,0 +1,7 @@
+node_modules
+coverage
+bench/.out/*.sqlite
+*.sqlite
+*.db
+npm-debug.log*
+.DS_Store
