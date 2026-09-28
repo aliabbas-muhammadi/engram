@@ -316,9 +316,9 @@ export function runBenchmarkArm(
     metrics.experienceRecall.queries += 1;
     const outcome = expectedOutcome(rawQuery);
     const rows = store.queryExperiences(rawQuery.query, asOf, 1);
-    const top = rows[0]?.text ?? null;
+    const topExperience = rows[0]?.text ?? null;
 
-    if (outcome && top?.includes(outcome)) {
+    if (outcome && topExperience?.includes(outcome)) {
       metrics.experienceRecall.correct += 1;
     }
   }
