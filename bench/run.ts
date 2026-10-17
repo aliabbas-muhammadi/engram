@@ -368,19 +368,10 @@ export function runBenchmark(dataset: Dataset, options: { sabotage?: boolean } =
     kind: 'append-only'
   });
 
-  const governedStaleRecall = metricsRateForStale(governed.metrics.staleRecall);
-  const baselineStaleRecall = metricsRateForStale(appendOnly.metrics.staleRecall);
-  const staleImprovement = governedStaleRecall - baselineStaleRecall;
-
-  const governedConRecall =
-    governed.metrics.contradiction.expectedPairs > 0
-      ? governed.metrics.contradiction.truePositive / governed.metrics.contradiction.expectedPairs
-      : 0;
-
-  const governedConPrecision =
-    governed.metrics.contradiction.foundPairs > 0
-      ? governed.metrics.contradiction.truePositive / governed.metrics.contradiction.foundPairs
-      : 0;
+  // Improvement means the governed arm returns stale facts less often than the
+  // baseline, matching the direction assertGate enforces.
+  const staleImprovement =
+    metricsRateForStale(appendOnly.metrics.staleRecall) - metricsRateForStale(governed.metrics.staleRecall);
 
   return {
     governed,
@@ -413,9 +404,9 @@ export function assertGate(governed: ArmResult, appendOnly: ArmResult): void {
       ? governed.metrics.contradiction.truePositive / governed.metrics.contradiction.expectedPairs
       : 0;
 
-    if (improvement < 0.15) {
-      throw new Error(`MEM_GATE failed: stale-recall improvement ${(improvement * 100).toFixed(2)}% < 15%`);
-    }
+  if (improvement < 0.15) {
+    throw new Error(`MEM_GATE failed: stale-recall improvement ${(improvement * 100).toFixed(2)}% < 15%`);
+  }
 
   if (governedConRecall < 0.8) {
     throw new Error(`MEM_GATE failed: contradiction recall ${(governedConRecall * 100).toFixed(2)}% < 80%`);
