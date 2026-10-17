@@ -55,6 +55,9 @@ const MEMORY_COLUMNS = `
   context_tag
 `;
 
+const INSERT_MEMORY_SQL = `INSERT INTO memories (${MEMORY_COLUMNS}) VALUES (${new Array(13).fill('?').join(',')})`;
+const SELECT_MEMORY_BY_ID_SQL = `SELECT rowid, ${MEMORY_COLUMNS} FROM memories WHERE id = ?`;
+
 function mapRow(row: MemoryRow): MemoryRecord {
   return {
     id: row.id,
@@ -118,19 +121,25 @@ export class MemoryStore {
   private readonly options: StoreOptions;
   private readonly db: DatabaseSync;
   private readonly clock: Clock;
-
-  private readonly memoryInsert: StatementSync;
-  private readonly selectById: StatementSync;
+  private readonly statements = new Map<string, StatementSync>();
 
   public constructor(options: StoreOptions) {
     this.options = options;
     this.db = new DatabaseSync(options.dbPath, { create: true });
     this.clock = options.clock ?? systemClock;
+  }
 
-    this.memoryInsert = this.db.prepare(
-      `INSERT INTO memories (${MEMORY_COLUMNS}) VALUES (${new Array(13).fill('?').join(',')})`
-    );
-    this.selectById = this.db.prepare(`SELECT rowid, ${MEMORY_COLUMNS} FROM memories WHERE id = ?`);
+  /**
+   * Statements are prepared on first use: preparing in the constructor fails
+   * because the tables do not exist until init() has run.
+   */
+  private statement(sql: string): StatementSync {
+    let prepared = this.statements.get(sql);
+    if (!prepared) {
+      prepared = this.db.prepare(sql);
+      this.statements.set(sql, prepared);
+    }
+    return prepared;
   }
 
   public init(): void {
@@ -241,7 +250,7 @@ export class MemoryStore {
     memory.status = 'active';
 
     return this.withTransaction(() => {
-      const existing = this.selectById.get(memory.id) as MemoryRow | null;
+      const existing = this.statement(SELECT_MEMORY_BY_ID_SQL).get(memory.id) as MemoryRow | null;
       if (existing) {
         return {
           kind: 'idempotent-hit',
@@ -284,7 +293,7 @@ export class MemoryStore {
       this.validateDerivedFromAcyclic(memory.id, derivedFrom);
     }
 
-    const existing = this.selectById.get(memory.id) as MemoryRow | null;
+    const existing = this.statement(SELECT_MEMORY_BY_ID_SQL).get(memory.id) as MemoryRow | null;
     if (existing) {
       return {
         kind: 'idempotent-hit',
@@ -540,7 +549,7 @@ export class MemoryStore {
   }
 
   private insertMemory(memory: MemoryRecord): void {
-    this.memoryInsert.run(
+    this.statement(INSERT_MEMORY_SQL).run(
       memory.id,
       memory.kind,
       memory.subjectKey,
