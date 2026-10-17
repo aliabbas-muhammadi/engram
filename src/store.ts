@@ -38,24 +38,26 @@ interface RankedMemoryRow extends MemoryRow {
   score: number;
 }
 
-const MEMORY_COLUMNS = `
-  id,
-  kind,
-  subject_key,
-  text,
-  valid_from,
-  written_at,
-  confidence,
-  source_trajectory,
-  source_turn,
-  derived_from,
-  status,
-  superseded_by,
-  superseded_at,
-  context_tag
-`;
+const MEMORY_COLUMN_NAMES = [
+  'id',
+  'kind',
+  'subject_key',
+  'text',
+  'valid_from',
+  'written_at',
+  'confidence',
+  'source_trajectory',
+  'source_turn',
+  'derived_from',
+  'status',
+  'superseded_by',
+  'superseded_at',
+  'context_tag'
+] as const;
 
-const INSERT_MEMORY_SQL = `INSERT INTO memories (${MEMORY_COLUMNS}) VALUES (${new Array(13).fill('?').join(',')})`;
+const MEMORY_COLUMNS = MEMORY_COLUMN_NAMES.join(', ');
+
+const INSERT_MEMORY_SQL = `INSERT INTO memories (${MEMORY_COLUMNS}) VALUES (${MEMORY_COLUMN_NAMES.map(() => '?').join(', ')})`;
 const SELECT_MEMORY_BY_ID_SQL = `SELECT rowid, ${MEMORY_COLUMNS} FROM memories WHERE id = ?`;
 
 function mapRow(row: MemoryRow): MemoryRecord {
