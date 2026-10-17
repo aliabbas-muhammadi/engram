@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { test } from 'node:test';
 
 import { MemoryStore } from '../src/store.ts';
-import { assertIsoUtcTimestamp, buildSafeFtsMatch, toCanonicalText } from '../src/utils.ts';
+import { buildSafeFtsMatch } from '../src/utils.ts';
 import { deterministicCandidateOrder, resolveConflictPlan } from '../src/conflict.ts';
 import { normalizeIncomingMemory } from '../src/memory.ts';
 import { runBenchmark, printSummary, assertGate, loadDataset } from '../bench/run.ts';
@@ -66,11 +66,6 @@ function runAndSortSnapshot(subjectKey: string, events: MemoryInput[]): string[]
 function getTopFact(store: MemoryStore, query: string, asOf: string): string | null {
   const rows = store.queryFacts(query, asOf, ['active', 'contextual']);
   return rows[0]?.id ?? null;
-}
-
-function readAllFromTable(dbPath: string, subject: string): Record<string, unknown>[] {
-  const connection = new MemoryStore({ dbPath, clock: fixedClock('2026-06-01T00:00:00.000Z') }).rawConnection();
-  return (connection.prepare(`SELECT * FROM memories WHERE subject_key = ?`).all(subject) as Record<string, unknown>[]);
 }
 
 function getAllMemories(store: MemoryStore, subjectKey: string) {
