@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -243,11 +243,19 @@ function ensureOutDir(rootDir: string): string {
   return outDir;
 }
 
+/** Each arm must start empty, or rows (and schema) from a previous run leak into the metrics. */
+function removeDatabase(dbPath: string): void {
+  for (const suffix of ['', '-wal', '-shm', '-journal']) {
+    rmSync(`${dbPath}${suffix}`, { force: true });
+  }
+}
+
 export function runBenchmarkArm(
   dataset: Dataset,
   dbPath: string,
   opts: { kind: 'governed' | 'append-only'; bypassGovernance?: boolean }
 ): ArmResult {
+  removeDatabase(dbPath);
   const store = new MemoryStore({
     dbPath,
     clock: new FixedClock('2026-12-31T00:00:00.000Z')
