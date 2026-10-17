@@ -160,7 +160,9 @@ export class MemoryStore {
 
   public init(): void {
     this.db.exec('PRAGMA foreign_keys = ON');
-    this.db.exec(`PRAGMA journal_mode = ${this.options.enableWal ? 'WAL' : 'OFF'}`);
+    // Never OFF: withTransaction relies on ROLLBACK, which SQLite leaves
+    // undefined when the journal is disabled.
+    this.db.exec(`PRAGMA journal_mode = ${this.options.enableWal ? 'WAL' : 'DELETE'}`);
 
     const modules = allRows<{ name: string }>(this.db.prepare('SELECT name FROM pragma_module_list'));
     if (!modules.some((entry) => entry.name === 'fts5')) {
