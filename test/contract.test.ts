@@ -688,6 +688,8 @@ test('benchmarks run with honest baseline, deterministic hashes, and gate behavi
   assert.equal(typeof parsed.governed['stale-recall'].staleReturned, 'number');
   assert.equal(typeof parsed.appendOnly['stale-recall'].staleReturned, 'number');
 
+  // The real store must clear the gate; bypassing governance must not.
+  assert.doesNotThrow(() => assertGate(result.governed, result.appendOnly));
   assert.throws(
     () => {
       const bypass = runBenchmark(dataset, { sabotage: true });
