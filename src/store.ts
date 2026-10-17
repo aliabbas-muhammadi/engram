@@ -1,4 +1,4 @@
-import { DatabaseSync, type StatementSync } from 'node:sqlite';
+import { DatabaseSync, type SQLInputValue, type StatementSync } from 'node:sqlite';
 
 import type {
   InsertResult,
@@ -61,6 +61,18 @@ const QUALIFIED_MEMORY_COLUMNS = MEMORY_COLUMN_NAMES.map((column) => `memories.$
 
 const INSERT_MEMORY_SQL = `INSERT INTO memories (${MEMORY_COLUMNS}) VALUES (${MEMORY_COLUMN_NAMES.map(() => '?').join(', ')})`;
 const SELECT_MEMORY_BY_ID_SQL = `SELECT rowid, ${MEMORY_COLUMNS} FROM memories WHERE id = ?`;
+
+/**
+ * node:sqlite returns untyped records; the selected columns define their shape.
+ * These helpers keep that single unchecked cast in one place.
+ */
+function allRows<T>(statement: StatementSync, ...params: SQLInputValue[]): T[] {
+  return statement.all(...params) as unknown as T[];
+}
+
+function getRow<T>(statement: StatementSync, ...params: SQLInputValue[]): T | undefined {
+  return statement.get(...params) as unknown as T | undefined;
+}
 
 function mapRow(row: MemoryRow): MemoryRecord {
   return {
@@ -150,7 +162,7 @@ export class MemoryStore {
     this.db.exec('PRAGMA foreign_keys = ON');
     this.db.exec(`PRAGMA journal_mode = ${this.options.enableWal ? 'WAL' : 'OFF'}`);
 
-    const modules = this.db.prepare('SELECT name FROM pragma_module_list').all() as Array<{ name: string }>;
+    const modules = allRows<{ name: string }>(this.db.prepare('SELECT name FROM pragma_module_list'));
     if (!modules.some((entry) => entry.name === 'fts5')) {
       throw new Error('SQLite FTS5 is unavailable in this runtime');
     }
@@ -258,7 +270,7 @@ export class MemoryStore {
     memory.status = 'active';
 
     return this.withTransaction(() => {
-      const existing = this.statement(SELECT_MEMORY_BY_ID_SQL).get(memory.id) as MemoryRow | null;
+      const existing = getRow<MemoryRow>(this.statement(SELECT_MEMORY_BY_ID_SQL), memory.id);
       if (existing) {
         return {
           kind: 'idempotent-hit',
@@ -301,7 +313,7 @@ export class MemoryStore {
       this.validateDerivedFromAcyclic(memory.id, derivedFrom);
     }
 
-    const existing = this.statement(SELECT_MEMORY_BY_ID_SQL).get(memory.id) as MemoryRow | null;
+    const existing = getRow<MemoryRow>(this.statement(SELECT_MEMORY_BY_ID_SQL), memory.id);
     if (existing) {
       return {
         kind: 'idempotent-hit',
@@ -386,8 +398,8 @@ export class MemoryStore {
       params.push(canonicalAsOf);
     }
 
-    const rows = this.db
-      .prepare(`
+    const rows = allRows<MemoryRow>(
+      this.db.prepare(`
         SELECT memories.rowid, ${QUALIFIED_MEMORY_COLUMNS}
         FROM memories
         JOIN memories_fts ON memories_fts.rowid = memories.rowid
@@ -410,8 +422,9 @@ export class MemoryStore {
           memories.valid_from DESC,
           memories.written_at DESC,
           memories.id ASC
-      `)
-      .all(...params) as unknown as MemoryRow[];
+      `),
+      ...params
+    );
 
     return rows.map(mapRow);
   }
@@ -427,8 +440,8 @@ export class MemoryStore {
       return [];
     }
 
-    const rows = this.db
-      .prepare(`
+    const rows = allRows<RankedMemoryRow>(
+      this.db.prepare(`
         SELECT memories.rowid, ${QUALIFIED_MEMORY_COLUMNS}, bm25(memories_fts) AS score
         FROM memories
         JOIN memories_fts ON memories_fts.rowid = memories.rowid
@@ -441,8 +454,9 @@ export class MemoryStore {
           memories.written_at DESC,
           memories.id ASC
         LIMIT ?
-      `)
-      .all(safeQuery, canonicalAsOf, canonicalAsOf, limit) as unknown as RankedMemoryRow[];
+      `),
+      safeQuery, canonicalAsOf, canonicalAsOf, limit
+    );
 
     return rows.map((row) => ({
       ...mapRow(row),
@@ -476,8 +490,8 @@ export class MemoryStore {
     // The query selects subjects; contradictions are then judged across every
     // visible fact in those subjects, since the conflicting fact need not
     // contain the query terms itself ("us-east" vs "us-west").
-    const rows = this.db
-      .prepare(`
+    const rows = allRows<MemoryRow>(
+      this.db.prepare(`
         SELECT memories.rowid, ${QUALIFIED_MEMORY_COLUMNS}
         FROM memories
         WHERE memories.kind = 'fact'
@@ -492,8 +506,9 @@ export class MemoryStore {
           AND memories.valid_from <= ?
           ${governanceFilter}
         ORDER BY memories.subject_key ASC, memories.valid_from ASC, memories.written_at ASC, memories.id ASC
-      `)
-      .all(...params) as unknown as MemoryRow[];
+      `),
+      ...params
+    );
     const memories = rows.map(mapRow);
 
     const grouped = new Map<string, MemoryRecord[]>();
@@ -549,8 +564,8 @@ export class MemoryStore {
   }
 
   private loadCandidatesForGovernance(subjectKey: string, asOfWrite: string): MemoryRecord[] {
-    const rows = this.db
-      .prepare(`
+    const rows = allRows<MemoryRow>(
+      this.db.prepare(`
         SELECT rowid, ${MEMORY_COLUMNS}
         FROM memories
         WHERE subject_key = ?
@@ -564,8 +579,9 @@ export class MemoryStore {
             )
           )
         ORDER BY valid_from ASC, written_at ASC, id ASC
-      `)
-      .all(subjectKey, asOfWrite, asOfWrite) as MemoryRow[];
+      `),
+      subjectKey, asOfWrite, asOfWrite
+    );
 
     return deterministicCandidateOrder(rows.map(mapRow));
   }
@@ -710,7 +726,7 @@ export class MemoryStore {
         throw new Error('derived_from contains self-reference');
       }
 
-      const row = select.get(parentId) as { 1: number } | null;
+      const row = getRow<{ 1: number }>(select, parentId);
       if (!row) {
         throw new Error(`derived_from references unknown memory id=${parentId}`);
       }
@@ -733,7 +749,7 @@ export class MemoryStore {
       }
 
       visited.add(current);
-      const row = select.get(current) as { derived_from: string | null } | null;
+      const row = getRow<{ derived_from: string | null }>(select, current);
       if (!row) {
         throw new Error(`derived_from references unknown memory id=${current}`);
       }
@@ -752,13 +768,14 @@ export class MemoryStore {
   }
 
   public getAllFactsForSubject(subjectKey: string): MemoryRecord[] {
-    return (this.db
-      .prepare(`
+    return allRows<MemoryRow>(
+      this.db.prepare(`
         SELECT rowid, ${MEMORY_COLUMNS}
         FROM memories
         WHERE subject_key = ? AND kind = 'fact'
         ORDER BY valid_from ASC, written_at ASC, id ASC
-      `)
-      .all(subjectKey) as MemoryRow[]).map(mapRow);
+      `),
+      subjectKey
+    ).map(mapRow);
   }
 }
