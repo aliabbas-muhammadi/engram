@@ -473,13 +473,21 @@ export class MemoryStore {
       params.push(canonicalAsOf);
     }
 
+    // The query selects subjects; contradictions are then judged across every
+    // visible fact in those subjects, since the conflicting fact need not
+    // contain the query terms itself ("us-east" vs "us-west").
     const rows = this.db
       .prepare(`
         SELECT memories.rowid, ${QUALIFIED_MEMORY_COLUMNS}
         FROM memories
-        JOIN memories_fts ON memories_fts.rowid = memories.rowid
         WHERE memories.kind = 'fact'
-          AND memories_fts MATCH ?
+          AND memories.subject_key IN (
+            SELECT matched.subject_key
+            FROM memories AS matched
+            JOIN memories_fts ON memories_fts.rowid = matched.rowid
+            WHERE matched.kind = 'fact'
+              AND memories_fts MATCH ?
+          )
           AND memories.written_at <= ?
           AND memories.valid_from <= ?
           ${governanceFilter}
