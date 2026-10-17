@@ -115,13 +115,15 @@ export interface InsertFactOptions {
 }
 
 export class MemoryStore {
+  private readonly options: StoreOptions;
   private readonly db: DatabaseSync;
   private readonly clock: Clock;
 
   private readonly memoryInsert: StatementSync;
   private readonly selectById: StatementSync;
 
-  public constructor(private readonly options: StoreOptions) {
+  public constructor(options: StoreOptions) {
+    this.options = options;
     this.db = new DatabaseSync(options.dbPath, { create: true });
     this.clock = options.clock ?? systemClock;
 

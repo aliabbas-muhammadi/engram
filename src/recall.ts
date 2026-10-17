@@ -9,12 +9,11 @@ export interface RecallCandidate {
 }
 
 export class RecallService {
+  private readonly store: MemoryStore;
   private readonly clock: Clock;
 
-  public constructor(
-    private readonly store: MemoryStore,
-    clock?: Clock
-  ) {
+  public constructor(store: MemoryStore, clock?: Clock) {
+    this.store = store;
     this.clock = clock ?? systemClock;
   }
 

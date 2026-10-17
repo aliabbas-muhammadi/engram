@@ -226,7 +226,12 @@ function evaluateContradictions(
 }
 
 class FixedClock implements Clock {
-  public constructor(private readonly at: string) {}
+  private readonly at: string;
+
+  public constructor(at: string) {
+    this.at = at;
+  }
+
   public nowUTC(): string {
     return this.at;
   }
