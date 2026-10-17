@@ -549,7 +549,7 @@ test('FTS trigger integrity test fails deterministic-retrieval when ai trigger i
     ['memories_fts_ad', 'memories_fts_ai', 'memories_fts_au']
   );
 
-  const seed = normalizeIncomingMemory({
+  const seed: MemoryInput = {
     kind: 'fact',
     subjectKey: 'trigger.test',
     text: 'safe token',
@@ -559,7 +559,7 @@ test('FTS trigger integrity test fails deterministic-retrieval when ai trigger i
     sourceTrajectory: null,
     sourceTurn: null,
     derivedFrom: null
-  });
+  };
 
   store.insertFact(seed);
   assert.equal(store.queryFacts('safe', '2026-02-01T00:00:00.000Z', ['active', 'contextual']).length, 1);
