@@ -746,8 +746,28 @@ test('baseline contradiction detector is deterministic and non-trivial', () => {
   const append = store.detectContradictions('same', '2026-06-01T00:00:00.000Z', { mode: 'append-only' });
   assert.ok(append.length >= 1);
 
+  // R1 superseded "same event" once "different event" became effective, so
+  // governed reads no longer see that contradiction.
   const governed = store.detectContradictions('same', '2026-06-01T00:00:00.000Z', { mode: 'governed' });
-  assert.ok(governed.length >= 1);
+  assert.equal(governed.length, 0);
+
+  // A same-valid-time contradiction cannot be resolved by supersession: it is
+  // flagged and stays visible to governed detection.
+  const conflicting = store.insertFact({
+    kind: 'fact',
+    subjectKey: 'baseline',
+    text: 'conflicting event',
+    validFrom: '2026-01-02T00:00:00.000Z',
+    writtenAt: '2026-01-03T00:00:00.000Z',
+    confidence: 1,
+    sourceTrajectory: null,
+    sourceTurn: null,
+    derivedFrom: null
+  });
+  assert.equal(conflicting.kind, 'conflicted+flagged');
+
+  const unresolved = store.detectContradictions('same', '2026-06-01T00:00:00.000Z', { mode: 'governed' });
+  assert.equal(unresolved.length, 1);
 
   closeAndDelete(store, dbPath);
 });
