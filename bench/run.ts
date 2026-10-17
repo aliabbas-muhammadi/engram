@@ -307,12 +307,13 @@ export function runBenchmarkArm(
     }
 
     if (type === 'stale-recall') {
-      if (!expectedFact) {
-        continue;
+      // `expected` is the current truth, or null when no current fact matches
+      // the query's (outdated) terms. Returning a listed stale fact counts
+      // against the arm; only the current truth counts as correct.
+      if (rawQuery.expected !== null && !expectedFact) {
+        throw new Error(`stale query ${rawQuery.id} needs a fact expectation or an explicit null`);
       }
 
-      // `expected` is the current truth; returning any listed stale fact counts
-      // against the arm, and only the current truth counts as correct.
       if (!rawQuery.staleFacts || rawQuery.staleFacts.length === 0) {
         throw new Error(`stale query ${rawQuery.id} must list staleFacts`);
       }
@@ -325,7 +326,7 @@ export function runBenchmarkArm(
         metrics.staleRecall.staleReturned += 1;
       }
 
-      if (returnedId === expectationId(expectedFact)) {
+      if (returnedId === (expectedFact ? expectationId(expectedFact) : null)) {
         metrics.correctRecall.correct += 1;
       }
 

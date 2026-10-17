@@ -55,6 +55,9 @@
     {"id":"q21","type":"fact","query":"no match exists","asOf":"2026-01-20T00:00:00.000Z","expected":null},
     {"id":"q22","type":"fact","query":"Beta risk high","asOf":"2026-01-19T00:00:00.000Z","expected":null},
     {"id":"q23","type":"stale","query":"gamma runtime","asOf":"2026-01-14T00:00:00.000Z","expected":{"subjectKey":"gamma.version","text":"Gamma runtime is 2.0","validFrom":"2026-01-12T00:00:00.000Z"},"staleFacts":[{"subjectKey":"gamma.version","text":"Gamma runtime is 1.8","validFrom":"2026-01-02T00:00:00.000Z"}]},
-    {"id":"q24","type":"contradiction","query":"beta risk","asOf":"2026-01-19T00:00:00.000Z","expectedPairs":[{"left":{"subjectKey":"beta.risk","text":"Beta risk is low","validFrom":"2026-01-08T00:00:00.000Z"},"right":{"subjectKey":"beta.risk","text":"Beta risk is medium","validFrom":"2026-01-08T00:00:00.000Z"}}]}
+    {"id":"q24","type":"contradiction","query":"beta risk","asOf":"2026-01-19T00:00:00.000Z","expectedPairs":[{"left":{"subjectKey":"beta.risk","text":"Beta risk is low","validFrom":"2026-01-08T00:00:00.000Z"},"right":{"subjectKey":"beta.risk","text":"Beta risk is medium","validFrom":"2026-01-08T00:00:00.000Z"}}]},
+    {"id":"q25","type":"stale","query":"alpha release cadence weekly","asOf":"2026-02-10T00:00:00.000Z","expected":null,"staleFacts":[{"subjectKey":"alpha.release","text":"Alpha release cadence is weekly","validFrom":"2026-01-01T00:00:00.000Z"},{"subjectKey":"alpha.release","text":"Alpha release cadence is weekly in production","validFrom":"2026-01-10T00:00:00.000Z"}]},
+    {"id":"q26","type":"stale","query":"beta region us-east","asOf":"2026-01-23T00:00:00.000Z","expected":null,"staleFacts":[{"subjectKey":"beta.region","text":"Beta region is us-east","validFrom":"2026-01-05T00:00:00.000Z"}]},
+    {"id":"q27","type":"stale","query":"gamma runtime 1.8","asOf":"2026-01-14T00:00:00.000Z","expected":null,"staleFacts":[{"subjectKey":"gamma.version","text":"Gamma runtime is 1.8","validFrom":"2026-01-02T00:00:00.000Z"}]}
   ]
 }
