@@ -129,7 +129,7 @@ export class MemoryStore {
 
   public constructor(options: StoreOptions) {
     this.options = options;
-    this.db = new DatabaseSync(options.dbPath, { create: true });
+    this.db = new DatabaseSync(options.dbPath);
     this.clock = options.clock ?? systemClock;
   }
 
