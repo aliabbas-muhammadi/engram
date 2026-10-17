@@ -546,7 +546,7 @@ test('FTS trigger integrity test fails deterministic-retrieval when ai trigger i
 
   assert.deepEqual(
     triggers.map((row) => row.name),
-    ['memories_fts_ai', 'memories_fts_ad', 'memories_fts_au']
+    ['memories_fts_ad', 'memories_fts_ai', 'memories_fts_au']
   );
 
   const seed = normalizeIncomingMemory({
