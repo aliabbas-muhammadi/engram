@@ -107,7 +107,7 @@ interface InsertResultBase {
 
 export type InsertResult =
   | ({ kind: 'created' } & InsertResultBase)
-  | ({ kind: 'idempotent-hit'; id: string; status: MemoryStatus; duplicateOf: string; message?: string })
+  | ({ kind: 'idempotent-hit'; id: string; status: MemoryStatus; duplicateOf: string; plan?: ResolutionPlan; message?: string })
   | ({ kind: 'conflicted+resolved'; id: string; status: MemoryStatus; plan: ResolutionPlan; message?: string })
   | ({ kind: 'conflicted+flagged'; id: string; status: MemoryStatus; plan: ResolutionPlan; message?: string })
   | ({ kind: 'error'; id: string; status: MemoryStatus; message: string });
