@@ -47,7 +47,7 @@
     {"id":"q13","type":"fact","query":"gamma mode","asOf":"2026-01-20T00:00:00.000Z","expected":{"subjectKey":"gamma.mode","text":"Gamma mode is safe","validFrom":"2026-01-18T00:00:00.000Z"}},
     {"id":"q14","type":"contradiction","query":"gamma runtime","asOf":"2026-01-14T00:00:00.000Z","expectedPairs":[{"left":{"subjectKey":"gamma.version","text":"Gamma runtime is 2.0","validFrom":"2026-01-12T00:00:00.000Z"},"right":{"subjectKey":"gamma.version","text":"Gamma runtime is 1.9","validFrom":"2026-01-12T00:00:00.000Z"}}]},
     {"id":"q15","type":"experience","query":"build alpha service api","asOf":"2026-01-06T00:00:00.000Z","expected":{"outcome":"failure"}},
-    {"id":"q16","type":"experience","query":"build alpha service api","asOf":"2026-01-10T00:00:00.000Z","expected":{"outcome":"success"}},
+    {"id":"q16","type":"experience","query":"build alpha service api","asOf":"2026-01-10T00:00:00.000Z","expected":{"outcome":"failure"}},
     {"id":"q17","type":"experience","query":"test beta suite smoke","asOf":"2026-01-07T00:00:00.000Z","expected":{"outcome":"success"}},
     {"id":"q18","type":"experience","query":"deploy alpha env prod","asOf":"2026-01-13T00:00:00.000Z","expected":{"outcome":"success"}},
     {"id":"q19","type":"fact","query":"Alpha release cadence","asOf":"2025-12-31T00:00:00.000Z","expected":null},
