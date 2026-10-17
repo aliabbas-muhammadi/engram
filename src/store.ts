@@ -375,6 +375,17 @@ export class MemoryStore {
       return [];
     }
 
+    // A fact superseded after `asOf` was still current at `asOf`, so as-of
+    // reads that ask for active facts must include it.
+    const includeSupersededLater = includeStatuses.includes('active');
+    const supersededLaterClause = includeSupersededLater
+      ? "OR (memories.status = 'superseded' AND memories.superseded_at > ?)"
+      : '';
+    const params: string[] = [safeQuery, canonicalAsOf, canonicalAsOf, ...includeStatuses];
+    if (includeSupersededLater) {
+      params.push(canonicalAsOf);
+    }
+
     const rows = this.db
       .prepare(`
         SELECT memories.rowid, ${QUALIFIED_MEMORY_COLUMNS}
@@ -384,17 +395,14 @@ export class MemoryStore {
           AND memories_fts MATCH ?
           AND memories.written_at <= ?
           AND memories.valid_from <= ?
-          AND memories.status IN ${inClause(includeStatuses)}
           AND (
-            memories.status != 'superseded'
-            OR (
-              memories.superseded_at IS NOT NULL
-              AND memories.superseded_at > ?
-            )
+            memories.status IN ${inClause(includeStatuses)}
+            ${supersededLaterClause}
           )
         ORDER BY bm25(memories_fts) ASC,
           CASE memories.status
             WHEN 'active' THEN 0
+            WHEN 'superseded' THEN 0
             WHEN 'contextual' THEN 1
             WHEN 'flagged' THEN 2
             ELSE 3
@@ -403,7 +411,7 @@ export class MemoryStore {
           memories.written_at DESC,
           memories.id ASC
       `)
-      .all(safeQuery, canonicalAsOf, canonicalAsOf, ...includeStatuses, canonicalAsOf) as unknown as MemoryRow[];
+      .all(...params) as unknown as MemoryRow[];
 
     return rows.map(mapRow);
   }
@@ -454,7 +462,8 @@ export class MemoryStore {
     }
 
     const governed = isGovernedMode(options.mode);
-    const statusFilter = governed ? "AND memories.status IN ('active', 'contextual', 'flagged')" : '';
+    // Governed reads skip facts superseded at or before `asOf`; facts superseded
+    // later were still current then and stay in scope.
     const governanceFilter = governed
       ? 'AND (memories.status != \'superseded\' OR (memories.superseded_at IS NOT NULL AND memories.superseded_at > ?))'
       : '';
@@ -473,7 +482,6 @@ export class MemoryStore {
           AND memories_fts MATCH ?
           AND memories.written_at <= ?
           AND memories.valid_from <= ?
-          ${statusFilter}
           ${governanceFilter}
         ORDER BY memories.subject_key ASC, memories.valid_from ASC, memories.written_at ASC, memories.id ASC
       `)
