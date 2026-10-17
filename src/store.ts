@@ -209,11 +209,11 @@ export class MemoryStore {
       END;
 
       CREATE TRIGGER IF NOT EXISTS memories_fts_ad AFTER DELETE ON memories BEGIN
-        DELETE FROM memories_fts WHERE rowid = old.rowid;
+        INSERT INTO memories_fts(memories_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
       END;
 
       CREATE TRIGGER IF NOT EXISTS memories_fts_au AFTER UPDATE OF text ON memories BEGIN
-        INSERT INTO memories_fts(memories_fts, 'delete', old.rowid, old.text);
+        INSERT INTO memories_fts(memories_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
         INSERT INTO memories_fts(rowid, text) VALUES (new.rowid, new.text);
       END;
     `);
