@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { MemoryStore } from '../src/store.ts';
-import { assertIsoUtcTimestamp, stableMemoryId } from '../src/utils.ts';
+import { assertIsoUtcTimestamp, buildSafeFtsMatch, stableMemoryId } from '../src/utils.ts';
 import type { Clock } from '../src/clock.ts';
 import type { MemoryInput } from '../src/types.ts';
 
@@ -285,7 +285,10 @@ export function runBenchmarkArm(
     const type = toCanonicalType(rawQuery.type);
     const asOf = assertIsoUtcTimestamp(rawQuery.asOf).value;
     const expectedFact = ensureFactExpectation(rawQuery.expected);
-    const top = store.queryFacts(rawQuery.query, asOf, ['active', 'contextual'])[0] ?? null;
+    const top =
+      opts.kind === 'governed'
+        ? store.queryFacts(rawQuery.query, asOf, ['active', 'contextual'])[0] ?? null
+        : baselineTopFact(store, rawQuery.query, asOf);
 
     if (type === 'correct-recall') {
       // `expected: null` means nothing relevant is known at asOf, so the
@@ -365,7 +368,36 @@ export function runBenchmarkArm(
   };
 }
 
-function topId(row: { id: string } | undefined): string | null {
+/**
+ * The baseline models a typical append-only agent memory: it knows a fact once
+ * it has been written, has no notion of valid time, and breaks relevance ties
+ * by the most recent write. Unlike the governed read path, a late-learned
+ * piece of history can displace the current fact.
+ */
+function baselineTopFact(store: MemoryStore, query: string, asOf: string): { id: string } | null {
+  const match = buildSafeFtsMatch(query);
+  if (!match) {
+    return null;
+  }
+
+  const row = store
+    .rawConnection()
+    .prepare(`
+      SELECT memories.id
+      FROM memories
+      JOIN memories_fts ON memories_fts.rowid = memories.rowid
+      WHERE memories.kind = 'fact'
+        AND memories_fts MATCH ?
+        AND memories.written_at <= ?
+      ORDER BY bm25(memories_fts) ASC, memories.written_at DESC, memories.id ASC
+      LIMIT 1
+    `)
+    .get(match, asOf) as { id: string } | undefined;
+
+  return row ?? null;
+}
+
+function topId(row: { id: string } | null | undefined): string | null {
   return row?.id ?? null;
 }
 
