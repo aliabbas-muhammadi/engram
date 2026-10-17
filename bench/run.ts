@@ -49,6 +49,8 @@ interface Query {
   query: string;
   asOf: string;
   expected?: FactExpectation | ExpectedExperience | null;
+  /** Stale probes: facts that were once true but are outdated at `asOf`. */
+  staleFacts?: FactExpectation[];
   expectedPairs?: ContradictionExpectation[];
   expectedOutcome?: 'success' | 'failure';
 }
@@ -303,14 +305,21 @@ export function runBenchmarkArm(
         continue;
       }
 
+      // `expected` is the current truth; returning any listed stale fact counts
+      // against the arm, and only the current truth counts as correct.
+      if (!rawQuery.staleFacts || rawQuery.staleFacts.length === 0) {
+        throw new Error(`stale query ${rawQuery.id} must list staleFacts`);
+      }
+
       metrics.staleRecall.queries += 1;
       metrics.correctRecall.queries += 1;
-      const expectedId = expectationId(expectedFact);
-      if (topId(top) === expectedId) {
+      const staleIds = new Set(rawQuery.staleFacts.map(expectationId));
+      const returnedId = topId(top);
+      if (returnedId !== null && staleIds.has(returnedId)) {
         metrics.staleRecall.staleReturned += 1;
       }
 
-      if (top?.id === expectationId(expectedFact)) {
+      if (returnedId === expectationId(expectedFact)) {
         metrics.correctRecall.correct += 1;
       }
 
