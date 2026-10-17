@@ -7,7 +7,7 @@ import { test } from 'node:test';
 
 import { MemoryStore } from '../src/store.ts';
 import { assertIsoUtcTimestamp, buildSafeFtsMatch, toCanonicalText } from '../src/utils.ts';
-import { resolveConflictPlan } from '../src/conflict.ts';
+import { deterministicCandidateOrder, resolveConflictPlan } from '../src/conflict.ts';
 import { normalizeIncomingMemory } from '../src/memory.ts';
 import { runBenchmark, printSummary, assertGate, loadDataset } from '../bench/run.ts';
 import type { MemoryInput } from '../src/types.ts';
