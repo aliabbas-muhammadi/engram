@@ -5,13 +5,13 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { test } from 'node:test';
 
-import { MemoryStore } from '../src/store';
-import { assertIsoUtcTimestamp, buildSafeFtsMatch, toCanonicalText } from '../src/utils';
-import { resolveConflictPlan } from '../src/conflict';
-import { normalizeIncomingMemory } from '../src/memory';
+import { MemoryStore } from '../src/store.ts';
+import { assertIsoUtcTimestamp, buildSafeFtsMatch, toCanonicalText } from '../src/utils.ts';
+import { resolveConflictPlan } from '../src/conflict.ts';
+import { normalizeIncomingMemory } from '../src/memory.ts';
 import { runBenchmark, printSummary, assertGate, loadDataset } from '../bench/run.ts';
-import { MemoryInput } from '../src/types';
-import { Clock } from '../src/clock';
+import type { MemoryInput } from '../src/types.ts';
+import type { Clock } from '../src/clock.ts';
 
 function fixedClock(at: string): Clock {
   return { nowUTC: () => at };

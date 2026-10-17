@@ -1,6 +1,6 @@
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 
-import {
+import type {
   InsertResult,
   MemoryRecord,
   MemoryInput,
@@ -9,12 +9,12 @@ import {
   ResolutionLogInput,
   ResolutionPlan,
   DetectContradictionOptions
-} from './types';
+} from './types.ts';
 
-import { Clock, systemClock } from './clock';
-import { resolveConflictPlan, deterministicCandidateOrder } from './conflict';
-import { normalizeIncomingMemory } from './memory';
-import { assertIsoUtcTimestamp, buildSafeFtsMatch, toCanonicalText } from './utils';
+import { type Clock, systemClock } from './clock.ts';
+import { resolveConflictPlan, deterministicCandidateOrder } from './conflict.ts';
+import { normalizeIncomingMemory } from './memory.ts';
+import { assertIsoUtcTimestamp, buildSafeFtsMatch, toCanonicalText } from './utils.ts';
 
 interface MemoryRow {
   rowid: number;

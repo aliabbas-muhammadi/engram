@@ -1,8 +1,8 @@
-import { MemoryStore } from './store';
-import { MemoryInput } from './types';
-import { Clock, systemClock } from './clock';
-import { assertIsoUtcTimestamp } from './utils';
-import { buildExperienceSubject, buildExperienceText } from './conflict';
+import { MemoryStore } from './store.ts';
+import type { MemoryInput } from './types.ts';
+import { type Clock, systemClock } from './clock.ts';
+import { assertIsoUtcTimestamp } from './utils.ts';
+import { buildExperienceSubject, buildExperienceText } from './conflict.ts';
 
 function stableJson(value: Record<string, unknown>): string {
   const keys = Object.keys(value).sort();

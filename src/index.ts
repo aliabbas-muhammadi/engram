@@ -1,6 +1,6 @@
-export * from './types';
-export { MemoryStore } from './store';
-export { RecallService } from './recall';
-export { recordOutcome, retrieveExperience } from './experience';
-export { systemClock, type Clock } from './clock';
-export { resolveConflictPlan, buildExperienceSubject, deterministicCandidateOrder } from './conflict';
+export * from './types.ts';
+export { MemoryStore } from './store.ts';
+export { RecallService } from './recall.ts';
+export { recordOutcome, retrieveExperience } from './experience.ts';
+export { systemClock, type Clock } from './clock.ts';
+export { resolveConflictPlan, buildExperienceSubject, deterministicCandidateOrder } from './conflict.ts';

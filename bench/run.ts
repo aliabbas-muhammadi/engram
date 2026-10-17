@@ -3,10 +3,10 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { MemoryStore } from '../src/store';
-import { assertIsoUtcTimestamp, stableMemoryId } from '../src/utils';
-import type { Clock } from '../src/clock';
-import type { MemoryInput } from '../src/types';
+import { MemoryStore } from '../src/store.ts';
+import { assertIsoUtcTimestamp, stableMemoryId } from '../src/utils.ts';
+import type { Clock } from '../src/clock.ts';
+import type { MemoryInput } from '../src/types.ts';
 
 interface DatasetEvent {
   kind: 'fact' | 'experience';

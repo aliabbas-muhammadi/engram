@@ -1,7 +1,7 @@
-import { MemoryStore } from './store';
-import { Clock, systemClock } from './clock';
-import { assertIsoUtcTimestamp } from './utils';
-import { MemoryRecord } from './types';
+import { MemoryStore } from './store.ts';
+import { type Clock, systemClock } from './clock.ts';
+import { assertIsoUtcTimestamp } from './utils.ts';
+import type { MemoryRecord } from './types.ts';
 
 export interface RecallCandidate {
   memory: MemoryRecord;

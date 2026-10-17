@@ -1,12 +1,12 @@
-import {
+import type {
   MemoryRecord,
   ResolutionPlan,
   ResolutionAction,
   ResolutionLogInput,
   ResolutionRule,
   SupersessionLink
-} from './types';
-import { toCanonicalText } from './utils';
+} from './types.ts';
+import { toCanonicalText } from './utils.ts';
 
 const LOW_CONFIDENCE_DELTA = 0.1;
 

@@ -3,8 +3,8 @@ import {
   normalizeConfidence,
   normalizeDerivedFrom,
   stableMemoryId
-} from './utils';
-import { MemoryInput, MemoryRecord } from './types';
+} from './utils.ts';
+import type { MemoryInput, MemoryRecord } from './types.ts';
 
 export function normalizeIncomingMemory(input: MemoryInput): MemoryRecord {
   if (typeof input.subjectKey !== 'string' || input.subjectKey.trim().length === 0) {
