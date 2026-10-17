@@ -400,7 +400,7 @@ export class MemoryStore {
           memories.written_at DESC,
           memories.id ASC
       `)
-      .all([safeQuery, canonicalAsOf, canonicalAsOf, ...includeStatuses, canonicalAsOf] as const) as MemoryRow[];
+      .all(safeQuery, canonicalAsOf, canonicalAsOf, ...includeStatuses, canonicalAsOf) as unknown as MemoryRow[];
 
     return rows.map(mapRow);
   }
@@ -431,13 +431,12 @@ export class MemoryStore {
           memories.id ASC
         LIMIT ?
       `)
-      .all([safeQuery, canonicalAsOf, canonicalAsOf, limit] as const)
-      .map((row: RankedMemoryRow) => ({
-        ...mapRow(row),
-        score: row.score
-      }));
+      .all(safeQuery, canonicalAsOf, canonicalAsOf, limit) as unknown as RankedMemoryRow[];
 
-    return rows;
+    return rows.map((row) => ({
+      ...mapRow(row),
+      score: row.score
+    }));
   }
 
   public detectContradictions(
@@ -475,11 +474,11 @@ export class MemoryStore {
           ${governanceFilter}
         ORDER BY memories.subject_key ASC, memories.valid_from ASC, memories.written_at ASC, memories.id ASC
       `)
-      .all(params as const)
-      .map((row: MemoryRow) => mapRow(row));
+      .all(...params) as unknown as MemoryRow[];
+    const memories = rows.map(mapRow);
 
     const grouped = new Map<string, MemoryRecord[]>();
-    for (const row of rows) {
+    for (const row of memories) {
       if (!grouped.has(row.subjectKey)) {
         grouped.set(row.subjectKey, []);
       }
