@@ -597,6 +597,39 @@ test('FTS trigger integrity test fails deterministic-retrieval when ai trigger i
   closeAndDelete(store, dbPath);
 });
 
+test('FTS index stays consistent when memories are updated or deleted', () => {
+  const dbPath = tempDbPath('fts-sync');
+  const store = new MemoryStore({ dbPath, clock: fixedClock('2026-03-03T00:00:00.000Z') });
+  store.init();
+
+  const base = {
+    kind: 'fact' as const,
+    validFrom: '2026-01-01T00:00:00.000Z',
+    writtenAt: '2026-01-01T00:00:00.000Z',
+    confidence: 0.8,
+    sourceTrajectory: null,
+    sourceTurn: null,
+    derivedFrom: null
+  };
+  const edited = store.insertFact({ ...base, subjectKey: 'sync.edited', text: 'original wording' });
+  const removed = store.insertFact({ ...base, subjectKey: 'sync.removed', text: 'doomed wording' });
+
+  const db = store.rawConnection();
+  db.prepare('UPDATE memories SET text = ? WHERE id = ?').run('revised wording', edited.id);
+  db.prepare('DELETE FROM memories WHERE id = ?').run(removed.id);
+
+  // rank = 1 also compares the index against the external content table;
+  // SQLite throws if they drifted apart.
+  db.exec("INSERT INTO memories_fts(memories_fts, rank) VALUES ('integrity-check', 1)");
+
+  const asOf = '2026-02-01T00:00:00.000Z';
+  assert.equal(store.queryFacts('original', asOf).length, 0);
+  assert.equal(store.queryFacts('revised', asOf)[0]?.id, edited.id);
+  assert.equal(store.queryFacts('doomed', asOf).length, 0);
+
+  closeAndDelete(store, dbPath);
+});
+
 test('duplicate-memory insert is idempotent and retains first provenance', () => {
   const dbPath = tempDbPath('dup');
   const store = new MemoryStore({ dbPath, clock: fixedClock('2026-01-01T00:00:00.000Z') });
