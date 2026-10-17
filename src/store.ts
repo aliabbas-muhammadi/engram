@@ -56,6 +56,8 @@ const MEMORY_COLUMN_NAMES = [
 ] as const;
 
 const MEMORY_COLUMNS = MEMORY_COLUMN_NAMES.join(', ');
+// Qualified for joins with memories_fts, which also has a `text` column.
+const QUALIFIED_MEMORY_COLUMNS = MEMORY_COLUMN_NAMES.map((column) => `memories.${column}`).join(', ');
 
 const INSERT_MEMORY_SQL = `INSERT INTO memories (${MEMORY_COLUMNS}) VALUES (${MEMORY_COLUMN_NAMES.map(() => '?').join(', ')})`;
 const SELECT_MEMORY_BY_ID_SQL = `SELECT rowid, ${MEMORY_COLUMNS} FROM memories WHERE id = ?`;
@@ -372,7 +374,7 @@ export class MemoryStore {
 
     const rows = this.db
       .prepare(`
-        SELECT memories.rowid, ${MEMORY_COLUMNS}
+        SELECT memories.rowid, ${QUALIFIED_MEMORY_COLUMNS}
         FROM memories
         JOIN memories_fts ON memories_fts.rowid = memories.rowid
         WHERE memories.kind = 'fact'
@@ -416,7 +418,7 @@ export class MemoryStore {
 
     const rows = this.db
       .prepare(`
-        SELECT memories.rowid, ${MEMORY_COLUMNS}, bm25(memories_fts) AS score
+        SELECT memories.rowid, ${QUALIFIED_MEMORY_COLUMNS}, bm25(memories_fts) AS score
         FROM memories
         JOIN memories_fts ON memories_fts.rowid = memories.rowid
         WHERE memories.kind = 'experience'
@@ -462,7 +464,7 @@ export class MemoryStore {
 
     const rows = this.db
       .prepare(`
-        SELECT memories.rowid, ${MEMORY_COLUMNS}
+        SELECT memories.rowid, ${QUALIFIED_MEMORY_COLUMNS}
         FROM memories
         JOIN memories_fts ON memories_fts.rowid = memories.rowid
         WHERE memories.kind = 'fact'
