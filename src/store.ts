@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { DatabaseSync, type SQLInputValue, type StatementSync } from 'node:sqlite';
 
 import type {
@@ -108,7 +109,7 @@ function parseDerivedFrom(value: string | null): string[] {
 
 function buildResolutionId(incomingId: string, existingId: string | null, action: string, rule: string, ts: string): string {
   const payload = JSON.stringify({ incomingId, existingId, action, rule, ts });
-  return `${incomingId.slice(0, 8)}.${existingId ?? 'root'}.${action}.${rule}.${ts}`;
+  return createHash('sha256').update(payload).digest('hex');
 }
 
 function canonicalPlaceholderList(values: readonly string[]): string {
