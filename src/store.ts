@@ -336,16 +336,15 @@ export class MemoryStore {
       memory.status = plan.incomingStatus;
       this.insertMemory(memory);
 
-      this.applyPlan(memory, plan);
+      this.applyPlan(plan);
       this.insertResolutionLogs(plan.logs);
 
-      const hasAnyAction = plan.steps.some((step) => step.action !== 'retain');
-      const hasFlag = plan.steps.some((step) => step.action === 'flag');
+      const hasSupersession = plan.supersessionLinks.length > 0;
 
       let resultKind: InsertResult['kind'];
-      if (memory.status === 'flagged' || hasFlag) {
+      if (memory.status === 'flagged') {
         resultKind = 'conflicted+flagged';
-      } else if (hasAnyAction) {
+      } else if (hasSupersession) {
         resultKind = 'conflicted+resolved';
       } else {
         resultKind = 'created';
@@ -570,8 +569,13 @@ export class MemoryStore {
     );
   }
 
-  private applyPlan(incoming: MemoryRecord, plan: ResolutionPlan): void {
-    if (plan.steps.length === 0 && plan.supersessionLinks.length === 0) {
+  /**
+   * Only supersession mutates existing rows. R2 `contextualize` steps record
+   * that distinct contexts coexist; they are audited in the resolution log but
+   * leave both facts active, so the outcome never depends on insertion order.
+   */
+  private applyPlan(plan: ResolutionPlan): void {
+    if (plan.supersessionLinks.length === 0) {
       return;
     }
 
@@ -580,19 +584,6 @@ export class MemoryStore {
       SET status = 'superseded', superseded_by = ?, superseded_at = ?
       WHERE id = ?
     `);
-
-    const updateContextualize = this.db.prepare(`
-      UPDATE memories
-      SET status = 'contextual'
-      WHERE id = ?
-    `);
-
-    for (const step of plan.steps) {
-      if (step.action === 'contextualize') {
-        updateContextualize.run(step.existingId);
-        continue;
-      }
-    }
 
     for (const link of plan.supersessionLinks) {
       updateSupersede.run(link.supersededBy, link.supersededAt, link.existingId);
