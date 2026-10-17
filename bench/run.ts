@@ -288,12 +288,15 @@ export function runBenchmarkArm(
     const top = store.queryFacts(rawQuery.query, asOf, ['active', 'contextual'])[0] ?? null;
 
     if (type === 'correct-recall') {
-      if (!expectedFact) {
-        continue;
+      // `expected: null` means nothing relevant is known at asOf, so the
+      // correct behaviour is to return no fact at all.
+      if (rawQuery.expected !== null && !expectedFact) {
+        throw new Error(`fact query ${rawQuery.id} needs a fact expectation or an explicit null`);
       }
 
       metrics.correctRecall.queries += 1;
-      if (top?.id === expectationId(expectedFact)) {
+      const expectedId = expectedFact ? expectationId(expectedFact) : null;
+      if (topId(top) === expectedId) {
         metrics.correctRecall.correct += 1;
       }
 
