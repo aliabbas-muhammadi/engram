@@ -72,38 +72,54 @@ npm run typecheck
 npm test                              # contract suite
 npm run bench                         # benchmark summary (JSON)
 MEM_DETERMINISM_CHECK=1 npm run bench # also verify run-to-run hashes match
-MEM_GATE=1 npm run bench              # enforce the quality gate (currently fails, see below)
+MEM_GATE=1 npm run bench              # enforce the quality gate
 ```
 
-CI runs typecheck, tests and the determinism check on every pull request.
+CI runs the typecheck, the tests, the benchmark gate and the determinism check
+on every pull request.
 
-## Benchmark status
+## Benchmark
 
-`bench/timeline.json` replays 29 events into a governed store and an
-append-only baseline, then scores 24 queries. From a clean run:
+`bench/timeline.json` replays 29 events into three arms and scores 27 queries:
 
-| Metric | Governed | Append-only |
-| --- | --- | --- |
-| Fact recall, as scored | 8/13 | 5/13 |
-| Fact recall, genuine fact queries only | 8/10 | 5/10 |
-| Stale facts returned | 0/3 | 0/3 |
-| Contradiction recall | 2/4 | 3/4 |
-| Experience recall | 3/4 | 3/4 |
+- **governed**: engram as shipped.
+- **baseline**: a typical append-only agent memory. A fact is known once it is
+  written, there is no valid time, and relevance ties go to the latest write.
+- **sabotage** (used by the gate test only): governed reads over an
+  append-only store, which isolates the effect of write-time governance.
 
-The `MEM_GATE` gate (≥15% stale-recall improvement, ≥80% contradiction recall)
-fails, and it cannot pass with the current dataset and metric design:
+| Metric | Governed | Baseline | Sabotage |
+| --- | --- | --- | --- |
+| Correct answer, including "nothing known" | 19/19 | 11/19 | 11/19 |
+| Stale fact returned (lower is better) | 0/6 | 3/6 | 3/6 |
+| Contradiction recall | 3/3 | 3/3 | 3/3 |
+| Contradiction precision | 3/5 | 3/8 | 3/8 |
+| Experience recall | 4/4 | 4/4 | 4/4 |
 
-- **Stale recall cannot separate the arms.** The baseline ranks the most
-  recent fact first, so it never returns stale facts either. Stale queries are
-  also counted in fact recall with the stale fact as the expected answer, which
-  penalises the governed arm for being correct.
-- **Some expectations contradict the data or the rules.**
-  - q5 shares no term with its target.
-  - q22 needs a word that is not yet written at its as-of time.
-  - q16 expects `success` when the latest outcome is `failure`.
-  - q24 expects a contradiction between experiences, which detection does not cover.
-  - q10 expects governed detection to report a pair that R1 already resolved.
+`MEM_GATE` requires a stale-recall improvement over the baseline of at least
+15 points and contradiction recall of at least 80%. The governed store passes
+(50-point improvement, 100% recall). The sabotage arm fails, which shows the
+stale-recall gain comes from supersession at write time, not from the
+valid-time read path.
 
-Fixing this means redesigning the benchmark (a baseline that can actually
-return stale facts, separate stale scoring, corrected expectations) before the
-gate is enforced in CI.
+**Ground truth conventions**
+
+- **Current truth:** the fact with the latest valid time that is known at the
+  query's as-of time. A same-time rival that is less confident, or that arrived
+  later, is contested rather than current.
+- **Stale probes:** each lists the facts that are outdated at its as-of time.
+  - Three are phrased in outdated terms ("beta region us-east" after the move
+    to us-west). The right answer is no fact, because the stale fact is
+    exactly what a naive memory returns.
+- **Contradictions:** two incompatible facts in the same subject and scope with
+  the same valid time. A change over time is a revision, not a contradiction.
+
+**Limits**
+
+- The dataset is small and hand-written. Perfect governed scores show the
+  rules behave as specified, not that they generalise.
+- Governed precision is 60% because detection also pairs flagged revisions
+  with the fact they failed to replace (q6). Those pairs are pending review
+  rather than same-time contradictions.
+- Recall is lexical (FTS5 with implicit AND), so a query must share every term
+  with a fact to find it.
