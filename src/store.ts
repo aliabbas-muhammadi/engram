@@ -203,22 +203,26 @@ export class MemoryStore {
       CREATE INDEX IF NOT EXISTS idx_resolutions_existing
         ON resolutions(existing_id);
 
+      -- subject_key is indexed with text so recall can match a fact by its subject
+      -- (e.g. "review" finds subject.review) even when the wording differs.
       CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts
-        USING fts5(text, content='memories', content_rowid='rowid');
+        USING fts5(subject_key, text, content='memories', content_rowid='rowid');
     `);
 
     this.db.exec(`
       CREATE TRIGGER IF NOT EXISTS memories_fts_ai AFTER INSERT ON memories BEGIN
-        INSERT INTO memories_fts(rowid, text) VALUES (new.rowid, new.text);
+        INSERT INTO memories_fts(rowid, subject_key, text) VALUES (new.rowid, new.subject_key, new.text);
       END;
 
       CREATE TRIGGER IF NOT EXISTS memories_fts_ad AFTER DELETE ON memories BEGIN
-        INSERT INTO memories_fts(memories_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
+        INSERT INTO memories_fts(memories_fts, rowid, subject_key, text)
+          VALUES ('delete', old.rowid, old.subject_key, old.text);
       END;
 
-      CREATE TRIGGER IF NOT EXISTS memories_fts_au AFTER UPDATE OF text ON memories BEGIN
-        INSERT INTO memories_fts(memories_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
-        INSERT INTO memories_fts(rowid, text) VALUES (new.rowid, new.text);
+      CREATE TRIGGER IF NOT EXISTS memories_fts_au AFTER UPDATE OF subject_key, text ON memories BEGIN
+        INSERT INTO memories_fts(memories_fts, rowid, subject_key, text)
+          VALUES ('delete', old.rowid, old.subject_key, old.text);
+        INSERT INTO memories_fts(rowid, subject_key, text) VALUES (new.rowid, new.subject_key, new.text);
       END;
     `);
   }
