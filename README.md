@@ -11,7 +11,8 @@ logged rule rather than by "latest write wins".
 - **`writtenAt`**: when the system learned it.
 - **As-of reads**: `queryFacts(query, asOf)` returns what was known *and*
   in effect at `asOf`. A fact superseded after `asOf` is still returned for
-  that time, so history stays queryable.
+  that time, with the status it held then (a contested fact stays flagged),
+  so history stays queryable.
 - **Recall** matches the query against both `subjectKey` and `text`.
 - **Duplicates** are idempotent: a memory's id is a SHA-256 of
   `(subjectKey, text, validFrom)`, and re-inserting keeps the first provenance.

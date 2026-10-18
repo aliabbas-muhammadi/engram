@@ -57,14 +57,15 @@ const MEMORY_COLUMN_NAMES = [
 ] as const;
 
 const MEMORY_COLUMNS = MEMORY_COLUMN_NAMES.join(', ');
-// Qualified for joins with memories_fts, which also has a `text` column.
-const QUALIFIED_MEMORY_COLUMNS = MEMORY_COLUMN_NAMES.map((column) => `memories.${column}`).join(', ');
+// Qualified for joins with memories_fts, which also has a `text` column, and
+// aliased so result keys never depend on SQLite's column-naming defaults.
+const QUALIFIED_MEMORY_COLUMNS = MEMORY_COLUMN_NAMES.map((column) => `memories.${column} AS ${column}`).join(', ');
 
 const INSERT_MEMORY_SQL = `INSERT INTO memories (${MEMORY_COLUMNS}) VALUES (${MEMORY_COLUMN_NAMES.map(() => '?').join(', ')})`;
 const SELECT_MEMORY_BY_ID_SQL = `SELECT rowid, ${MEMORY_COLUMNS} FROM memories WHERE id = ?`;
 
 /** Bump when the schema changes, and add the migration step that reaches it. */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 const FTS_SCHEMA_SQL = `
   -- subject_key is indexed with text so recall can match a fact by its subject
@@ -211,6 +212,7 @@ export class MemoryStore {
         superseded_by TEXT,
         superseded_at TEXT,
         context_tag TEXT,
+        prior_status TEXT CHECK (prior_status IS NULL OR prior_status IN ('active', 'flagged', 'contextual')),
         FOREIGN KEY (superseded_by) REFERENCES memories(id) ON DELETE SET NULL
       );
 
@@ -266,17 +268,16 @@ export class MemoryStore {
       if (current < 1) {
         this.migrateToSubjectIndexedFts();
       }
+      if (current < 2) {
+        this.migrateToPriorStatus();
+      }
       this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     });
   }
 
   /** v1: memories_fts indexes subject_key as well as text; earlier databases indexed text only. */
   private migrateToSubjectIndexedFts(): void {
-    const columns = allRows<{ name: string }>(
-      this.db.prepare('SELECT name FROM pragma_table_info(?)'),
-      'memories_fts'
-    ).map((column) => column.name);
-    if (columns.includes('subject_key')) {
+    if (this.tableColumns('memories_fts').includes('subject_key')) {
       return;
     }
 
@@ -288,6 +289,37 @@ export class MemoryStore {
     `);
     this.db.exec(FTS_SCHEMA_SQL);
     this.db.exec("INSERT INTO memories_fts(memories_fts) VALUES ('rebuild')");
+  }
+
+  /** v2: memories.prior_status keeps the status a fact held when it was superseded. */
+  private migrateToPriorStatus(): void {
+    if (this.tableColumns('memories').includes('prior_status')) {
+      return;
+    }
+
+    this.db.exec(`
+      ALTER TABLE memories ADD COLUMN prior_status TEXT
+        CHECK (prior_status IS NULL OR prior_status IN ('active', 'flagged', 'contextual'))
+    `);
+    // Facts superseded before v2 lost that status. A flag decision logged when
+    // the fact itself was inserted is the surviving evidence that it was contested.
+    this.db.exec(`
+      UPDATE memories
+      SET prior_status = CASE
+        WHEN EXISTS (
+          SELECT 1 FROM resolutions
+          WHERE resolutions.incoming_id = memories.id AND resolutions.action = 'flag'
+        ) THEN 'flagged'
+        ELSE 'active'
+      END
+      WHERE status = 'superseded'
+    `);
+  }
+
+  private tableColumns(table: string): string[] {
+    return allRows<{ name: string }>(this.db.prepare('SELECT name FROM pragma_table_info(?)'), table).map(
+      (column) => column.name
+    );
   }
 
   public close(): void {
@@ -438,43 +470,44 @@ export class MemoryStore {
       return [];
     }
 
-    // A fact superseded after `asOf` was still current at `asOf`, so as-of
-    // reads that ask for active facts must include it.
-    const includeSupersededLater = includeStatuses.includes('active');
-    const supersededLaterClause = includeSupersededLater
-      ? "OR (memories.status = 'superseded' AND memories.superseded_at > ?)"
-      : '';
-    const params: string[] = [safeQuery, canonicalAsOf, canonicalAsOf, ...includeStatuses];
-    if (includeSupersededLater) {
-      params.push(canonicalAsOf);
-    }
-
+    // Filter and rank on each fact's status as of `asOf`: a fact superseded
+    // later was still in effect then, with the status it held before
+    // supersession (a contested fact stays flagged, not active).
     const rows = allRows<MemoryRow>(
       this.db.prepare(`
-        SELECT memories.rowid, ${QUALIFIED_MEMORY_COLUMNS}
-        FROM memories
-        JOIN memories_fts ON memories_fts.rowid = memories.rowid
-        WHERE memories.kind = 'fact'
-          AND memories_fts MATCH ?
-          AND memories.written_at <= ?
-          AND memories.valid_from <= ?
-          AND (
-            memories.status IN ${inClause(includeStatuses)}
-            ${supersededLaterClause}
-          )
-        ORDER BY bm25(memories_fts) ASC,
-          CASE memories.status
+        SELECT rowid, ${MEMORY_COLUMNS}
+        FROM (
+          SELECT memories.rowid AS rowid, ${QUALIFIED_MEMORY_COLUMNS},
+            bm25(memories_fts) AS relevance,
+            CASE
+              WHEN memories.status = 'superseded' AND memories.superseded_at > ?
+                THEN COALESCE(memories.prior_status, 'active')
+              ELSE memories.status
+            END AS status_as_of
+          FROM memories
+          JOIN memories_fts ON memories_fts.rowid = memories.rowid
+          WHERE memories.kind = 'fact'
+            AND memories_fts MATCH ?
+            AND memories.written_at <= ?
+            AND memories.valid_from <= ?
+        )
+        WHERE status_as_of IN ${inClause(includeStatuses)}
+        ORDER BY relevance ASC,
+          CASE status_as_of
             WHEN 'active' THEN 0
-            WHEN 'superseded' THEN 0
             WHEN 'contextual' THEN 1
             WHEN 'flagged' THEN 2
             ELSE 3
           END,
-          memories.valid_from DESC,
-          memories.written_at DESC,
-          memories.id ASC
+          valid_from DESC,
+          written_at DESC,
+          id ASC
       `),
-      ...params
+      canonicalAsOf,
+      safeQuery,
+      canonicalAsOf,
+      canonicalAsOf,
+      ...includeStatuses
     );
 
     return rows.map(mapRow);
@@ -668,7 +701,10 @@ export class MemoryStore {
 
     const updateSupersede = this.db.prepare(`
       UPDATE memories
-      SET status = 'superseded', superseded_by = ?, superseded_at = ?
+      SET prior_status = CASE WHEN status = 'superseded' THEN prior_status ELSE status END,
+        status = 'superseded',
+        superseded_by = ?,
+        superseded_at = ?
       WHERE id = ?
     `);
 

@@ -265,6 +265,61 @@ test('recall contract: query before valid-time returns no facts', () => {
   closeAndDelete(store, dbPath);
 });
 
+test('recall contract: a flagged fact superseded later is still flagged in earlier as-of reads', () => {
+  const dbPath = tempDbPath('flagged-superseded');
+  const store = new MemoryStore({ dbPath, clock: fixedClock('2026-02-01T00:00:00.000Z') });
+  store.init();
+
+  const fact = (text: string, validFrom: string, writtenAt: string) =>
+    store.insertFact({ kind: 'fact', subjectKey: 'subject.risk', text, validFrom, writtenAt, confidence: 0.8 });
+
+  assert.equal(fact('risk is low', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z').kind, 'created');
+  assert.equal(fact('risk is medium', '2026-01-01T00:00:00.000Z', '2026-01-02T00:00:00.000Z').kind, 'conflicted+flagged');
+  assert.equal(fact('risk is high', '2026-01-10T00:00:00.000Z', '2026-01-10T00:00:00.000Z').kind, 'conflicted+resolved');
+
+  // On 01-05 "medium" was a contested claim under review, not the current fact.
+  const asOf = '2026-01-05T00:00:00.000Z';
+  assert.deepEqual(store.queryFacts('risk', asOf).map((row) => row.text), ['risk is low']);
+  assert.deepEqual(
+    store.queryFacts('risk', asOf, ['flagged']).map((row) => row.text),
+    ['risk is medium']
+  );
+  assert.deepEqual(store.queryFacts('risk', '2026-01-20T00:00:00.000Z').map((row) => row.text), ['risk is high']);
+
+  closeAndDelete(store, dbPath);
+});
+
+test('recall contract: a backdated write re-supersedes history without losing prior status', () => {
+  const dbPath = tempDbPath('out-of-order');
+  const store = new MemoryStore({ dbPath, clock: fixedClock('2026-02-01T00:00:00.000Z') });
+  store.init();
+
+  const fact = (text: string, validFrom: string, writtenAt: string) =>
+    store.insertFact({ kind: 'fact', subjectKey: 'subject.level', text, validFrom, writtenAt, confidence: 0.8 });
+
+  const low = fact('level is low', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+  fact('level is high', '2026-01-10T00:00:00.000Z', '2026-01-10T00:00:00.000Z');
+  // Learned on 01-05 but recorded after the 01-10 revision: "low" was already superseded.
+  const medium = fact('level is medium', '2026-01-05T00:00:00.000Z', '2026-01-05T00:00:00.000Z');
+  assert.equal(medium.kind, 'conflicted+resolved');
+
+  const lowRow = store
+    .rawConnection()
+    .prepare('SELECT status, prior_status, superseded_by, superseded_at FROM memories WHERE id = ?')
+    .get(low.id) as Record<string, unknown>;
+  assert.deepEqual({ ...lowRow }, {
+    status: 'superseded',
+    prior_status: 'active',
+    superseded_by: medium.id,
+    superseded_at: '2026-01-05T00:00:00.000Z'
+  });
+
+  assert.deepEqual(store.queryFacts('level', '2026-01-03T00:00:00.000Z').map((row) => row.text), ['level is low']);
+  assert.deepEqual(store.queryFacts('level', '2026-01-07T00:00:00.000Z').map((row) => row.text), ['level is medium']);
+
+  closeAndDelete(store, dbPath);
+});
+
 test('context-aware R1/R2 precedence: prod and staging coexistence', () => {
   const dbPath = tempDbPath('contexts');
   const store = new MemoryStore({ dbPath, clock: fixedClock('2026-08-20T00:00:00.000Z') });
@@ -666,6 +721,31 @@ test('init migrates a legacy text-only FTS index to subject-aware recall', () =>
   assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, SCHEMA_VERSION);
   db.exec("INSERT INTO memories_fts(memories_fts, rank) VALUES ('integrity-check', 1)");
   assert.equal(store.queryFacts('cadence', '2026-02-01T00:00:00.000Z')[0]?.text, 'weekly');
+
+  closeAndDelete(store, dbPath);
+});
+
+test('init backfills prior status for facts superseded before schema v2', () => {
+  const dbPath = tempDbPath('migrate-prior-status');
+  const v1 = new MemoryStore({ dbPath, clock: fixedClock('2026-02-01T00:00:00.000Z') });
+  v1.init();
+  const fact = (text: string, validFrom: string, writtenAt: string) =>
+    v1.insertFact({ kind: 'fact', subjectKey: 'subject.risk', text, validFrom, writtenAt, confidence: 0.8 });
+  fact('risk is low', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+  fact('risk is medium', '2026-01-01T00:00:00.000Z', '2026-01-02T00:00:00.000Z');
+  fact('risk is high', '2026-01-10T00:00:00.000Z', '2026-01-10T00:00:00.000Z');
+
+  // Recreate a v1 database: same rows, no record of status before supersession.
+  v1.rawConnection().exec('ALTER TABLE memories DROP COLUMN prior_status; PRAGMA user_version = 1;');
+  v1.close();
+
+  const store = new MemoryStore({ dbPath, clock: fixedClock('2026-02-01T00:00:00.000Z') });
+  store.init();
+
+  // The flag decision logged for "medium" on insert is the evidence it was contested.
+  const asOf = '2026-01-05T00:00:00.000Z';
+  assert.deepEqual(store.queryFacts('risk', asOf).map((row) => row.text), ['risk is low']);
+  assert.deepEqual(store.queryFacts('risk', asOf, ['flagged']).map((row) => row.text), ['risk is medium']);
 
   closeAndDelete(store, dbPath);
 });
