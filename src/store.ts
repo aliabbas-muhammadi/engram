@@ -153,6 +153,11 @@ function isGovernedMode(mode?: DetectContradictionOptions['mode']): boolean {
 export interface StoreOptions {
   dbPath: string;
   clock?: Clock;
+  /**
+   * Write-ahead logging (default true). It roughly halves governed-insert time
+   * with every commit still synced; set false on filesystems without shared
+   * memory support, such as network mounts.
+   */
   enableWal?: boolean;
 }
 
@@ -189,7 +194,7 @@ export class MemoryStore {
     this.db.exec('PRAGMA foreign_keys = ON');
     // Never OFF: withTransaction relies on ROLLBACK, which SQLite leaves
     // undefined when the journal is disabled.
-    this.db.exec(`PRAGMA journal_mode = ${this.options.enableWal ? 'WAL' : 'DELETE'}`);
+    this.db.exec(`PRAGMA journal_mode = ${this.options.enableWal === false ? 'DELETE' : 'WAL'}`);
 
     const modules = allRows<{ name: string }>(this.db.prepare('SELECT name FROM pragma_module_list'));
     if (!modules.some((entry) => entry.name === 'fts5')) {
