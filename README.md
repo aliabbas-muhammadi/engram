@@ -37,10 +37,15 @@ as the insert. Governed contradiction detection reports unresolved
 conflicts only: a pair resolved by R1 supersession is no longer reported,
 whereas a flagged same-time conflict is.
 
-Writes are expected in write-time order per subject. A backdated write is
-resolved against what was known at its `writtenAt`, so it correctly
-supersedes older history. But it is not re-checked against facts recorded
-earlier that are effective later and would supersede it in turn.
+Writes may arrive out of order. A backdated write is resolved against what was
+known at its `writtenAt`, so it supersedes older history. It is then checked
+against facts already stored that were written after it: the first one R1 would
+have applied supersedes it, as of that fact's write time. In-order and
+out-of-order imports of the same facts therefore end in the same state.
+
+One gap remains. A stored later fact that R3 would have flagged because of the
+backdated fact is not retroactively flagged. Both stay current, and governed
+detection reports them as an unresolved contradiction.
 
 ## API
 
@@ -70,14 +75,14 @@ append-only experiences.
 ## Performance
 
 Each governed insert is its own transaction, so commit durability dominates
-its cost. For 3,000 conflicting inserts across 50 subjects (median of 5 runs,
-in the development container):
+its cost. For 3,000 conflicting inserts across 50 subjects, partly out of
+order (median of 5 runs, in the development container):
 
 | Journal | Time | Per insert |
 | --- | --- | --- |
-| WAL (default), every commit synced | 4.7 s | 1.6 ms |
-| Rollback journal (`enableWal: false`) | 9.8 s | 3.3 ms |
-| In memory, no durability | 1.2 s | 0.4 ms |
+| WAL (default), every commit synced | 5.3 s | 1.8 ms |
+| Rollback journal (`enableWal: false`) | 11.7 s | 3.9 ms |
+| In memory, no durability | 1.7 s | 0.6 ms |
 
 WAL needs shared memory, so use `enableWal: false` on network filesystems.
 Reusing prepared statements made no measurable difference, so the store only
