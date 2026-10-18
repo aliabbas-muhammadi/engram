@@ -310,6 +310,38 @@ export function resolveConflictPlan(
   };
 }
 
+/**
+ * For a backdated write: the first fact, in write order, among facts already
+ * stored that were written after `incoming`, that R1 would have used to
+ * supersede `incoming` had it been recorded on time.
+ *
+ * Candidates must be in the same scope, incompatible, and effective later.
+ * The caller excludes facts that were themselves contested. A candidate far
+ * less confident than `incoming` is skipped, because R3 would have flagged it
+ * rather than applied it.
+ */
+export function findLaterSuperseder(
+  incoming: MemoryRecord,
+  laterWrites: MemoryRecord[],
+  options: ConflictOptions = {}
+): MemoryRecord | null {
+  const confidenceFloor = options.supersedeIfLowerConfidence ?? LOW_CONFIDENCE_DELTA;
+  const byWriteTime = [...laterWrites].sort(
+    (left, right) => compareDateString(left.writtenAt, right.writtenAt) || compareTimeThenId(left, right)
+  );
+
+  return (
+    byWriteTime.find(
+      (candidate) =>
+        candidate.id !== incoming.id &&
+        isSameScopeContext(candidate.contextTag, incoming.contextTag) &&
+        areTextIncompatible(candidate.text, incoming.text) &&
+        compareDateString(candidate.validFrom, incoming.validFrom) > 0 &&
+        !(candidate.confidence + confidenceFloor < incoming.confidence)
+    ) ?? null
+  );
+}
+
 export function buildExperienceSubject(action: string): string {
   return `action.${action}`;
 }

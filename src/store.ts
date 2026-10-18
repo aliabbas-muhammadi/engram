@@ -13,7 +13,7 @@ import type {
 } from './types.ts';
 
 import { type Clock, systemClock } from './clock.ts';
-import { resolveConflictPlan, deterministicCandidateOrder } from './conflict.ts';
+import { resolveConflictPlan, deterministicCandidateOrder, findLaterSuperseder } from './conflict.ts';
 import { normalizeIncomingMemory } from './memory.ts';
 import { assertIsoUtcTimestamp, buildSafeFtsMatch, toCanonicalText } from './utils.ts';
 
@@ -63,6 +63,17 @@ const QUALIFIED_MEMORY_COLUMNS = MEMORY_COLUMN_NAMES.map((column) => `memories.$
 
 const INSERT_MEMORY_SQL = `INSERT INTO memories (${MEMORY_COLUMNS}) VALUES (${MEMORY_COLUMN_NAMES.map(() => '?').join(', ')})`;
 const SELECT_MEMORY_BY_ID_SQL = `SELECT rowid, ${MEMORY_COLUMNS} FROM memories WHERE id = ?`;
+
+// Re-superseding an already superseded fact (a backdated write) moves the
+// supersession earlier and keeps the status the fact held originally.
+const SUPERSEDE_SQL = `
+  UPDATE memories
+  SET prior_status = CASE WHEN status = 'superseded' THEN prior_status ELSE status END,
+    status = 'superseded',
+    superseded_by = ?,
+    superseded_at = ?
+  WHERE id = ?
+`;
 
 /** Bump when the schema changes, and add the migration step that reaches it. */
 export const SCHEMA_VERSION = 2;
@@ -442,8 +453,9 @@ export class MemoryStore {
 
       this.applyPlan(plan);
       this.insertResolutionLogs(plan.logs);
+      const laterSuperseder = this.applyLaterSupersession(memory);
 
-      const hasSupersession = plan.supersessionLinks.length > 0;
+      const hasSupersession = plan.supersessionLinks.length > 0 || laterSuperseder !== null;
 
       let resultKind: InsertResult['kind'];
       if (memory.status === 'flagged') {
@@ -454,12 +466,17 @@ export class MemoryStore {
         resultKind = 'created';
       }
 
+      let message = memory.status === 'flagged' ? 'incoming fact flagged for review' : 'fact inserted';
+      if (laterSuperseder) {
+        message += '; already superseded by a later-effective fact recorded before it';
+      }
+
       return {
         kind: resultKind,
         id: memory.id,
-        status: memory.status,
+        status: laterSuperseder ? 'superseded' : memory.status,
         plan,
-        message: memory.status === 'flagged' ? 'incoming fact flagged for review' : 'fact inserted'
+        message
       };
     });
   }
@@ -704,18 +721,51 @@ export class MemoryStore {
       return;
     }
 
-    const updateSupersede = this.db.prepare(`
-      UPDATE memories
-      SET prior_status = CASE WHEN status = 'superseded' THEN prior_status ELSE status END,
-        status = 'superseded',
-        superseded_by = ?,
-        superseded_at = ?
-      WHERE id = ?
-    `);
-
+    const updateSupersede = this.db.prepare(SUPERSEDE_SQL);
     for (const link of plan.supersessionLinks) {
       updateSupersede.run(link.supersededBy, link.supersededAt, link.existingId);
     }
+  }
+
+  /**
+   * A backdated write is planned against what was known at its own writtenAt.
+   * Facts already stored that were written after it and take effect later
+   * would have superseded it had it arrived on time; apply that now, as of
+   * the superseding fact's write time.
+   */
+  private applyLaterSupersession(memory: MemoryRecord): MemoryRecord | null {
+    const laterWrites = allRows<MemoryRow>(
+      this.db.prepare(`
+        SELECT rowid, ${MEMORY_COLUMNS}
+        FROM memories
+        WHERE subject_key = ?
+          AND kind = 'fact'
+          AND written_at > ?
+          AND valid_from > ?
+          AND COALESCE(CASE WHEN status = 'superseded' THEN prior_status END, status) != 'flagged'
+      `),
+      memory.subjectKey,
+      memory.writtenAt,
+      memory.validFrom
+    ).map(mapRow);
+
+    const superseder = findLaterSuperseder(memory, laterWrites);
+    if (!superseder) {
+      return null;
+    }
+
+    this.db.prepare(SUPERSEDE_SQL).run(superseder.id, superseder.writtenAt, memory.id);
+    this.insertResolutionLogs([
+      {
+        incomingId: superseder.id,
+        existingId: memory.id,
+        action: 'supersede',
+        rule: 'R1_SUPERSEDE',
+        decisionTs: superseder.writtenAt,
+        details: 'backdated fact superseded by a later-effective fact recorded before it'
+      }
+    ]);
+    return superseder;
   }
 
   private insertResolutionLogs(logs: ReadonlyArray<ResolutionLogInput>): void {

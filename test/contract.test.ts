@@ -320,6 +320,69 @@ test('recall contract: a backdated write re-supersedes history without losing pr
   closeAndDelete(store, dbPath);
 });
 
+test('recall contract: a backdated write is superseded by a later-effective fact recorded before it', () => {
+  const dbPath = tempDbPath('backdated-superseded');
+  const store = new MemoryStore({ dbPath, clock: fixedClock('2026-02-01T00:00:00.000Z') });
+  store.init();
+
+  const fact = (text: string, validFrom: string, writtenAt: string) =>
+    store.insertFact({ kind: 'fact', subjectKey: 'subject.tier', text, validFrom, writtenAt, confidence: 0.8 });
+
+  fact('tier is bronze', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+  const gold = fact('tier is gold', '2026-01-10T00:00:00.000Z', '2026-01-10T00:00:00.000Z');
+  // Learned on 01-05 but recorded after the 01-10 revision.
+  const silver = fact('tier is silver', '2026-01-05T00:00:00.000Z', '2026-01-05T00:00:00.000Z');
+  assert.equal(silver.kind, 'conflicted+resolved');
+  assert.equal(silver.status, 'superseded');
+
+  // Had it arrived on time, gold would have superseded silver on 01-10.
+  const silverRow = store
+    .rawConnection()
+    .prepare('SELECT status, prior_status, superseded_by, superseded_at FROM memories WHERE id = ?')
+    .get(silver.id) as Record<string, unknown>;
+  assert.deepEqual({ ...silverRow }, {
+    status: 'superseded',
+    prior_status: 'active',
+    superseded_by: gold.id,
+    superseded_at: '2026-01-10T00:00:00.000Z'
+  });
+
+  assert.deepEqual(store.queryFacts('tier', '2026-01-07T00:00:00.000Z').map((row) => row.text), ['tier is silver']);
+  assert.deepEqual(store.queryFacts('tier', '2026-01-20T00:00:00.000Z').map((row) => row.text), ['tier is gold']);
+  assert.equal(store.detectContradictions('tier', '2026-01-20T00:00:00.000Z', { mode: 'governed' }).length, 0);
+
+  const logged = store
+    .rawConnection()
+    .prepare("SELECT incoming_id, action, rule FROM resolutions WHERE existing_id = ? AND action = 'supersede'")
+    .all(silver.id) as Array<Record<string, unknown>>;
+  assert.deepEqual(logged.map((row) => ({ ...row })), [{ incoming_id: gold.id, action: 'supersede', rule: 'R1_SUPERSEDE' }]);
+
+  closeAndDelete(store, dbPath);
+});
+
+test('recall contract: a backdated write stays current when no later fact would have superseded it', () => {
+  const dbPath = tempDbPath('backdated-kept');
+  const store = new MemoryStore({ dbPath, clock: fixedClock('2026-02-01T00:00:00.000Z') });
+  store.init();
+
+  const fact = (subjectKey: string, text: string, validFrom: string, writtenAt: string, extra = {}) =>
+    store.insertFact({ kind: 'fact', subjectKey, text, validFrom, writtenAt, confidence: 0.8, ...extra });
+
+  // Later fact in another context: R2 coexistence, not supersession.
+  fact('subject.ctx', 'ctx is staging-only', '2026-01-10T00:00:00.000Z', '2026-01-10T00:00:00.000Z', { contextTag: 'staging' });
+  assert.equal(fact('subject.ctx', 'ctx is prod-only', '2026-01-05T00:00:00.000Z', '2026-01-05T00:00:00.000Z', { contextTag: 'prod' }).status, 'active');
+
+  // Later fact far less confident: R3 would have flagged it instead of applying it.
+  fact('subject.conf', 'conf is weak', '2026-01-10T00:00:00.000Z', '2026-01-10T00:00:00.000Z', { confidence: 0.5 });
+  assert.equal(fact('subject.conf', 'conf is strong', '2026-01-05T00:00:00.000Z', '2026-01-05T00:00:00.000Z', { confidence: 0.9 }).status, 'active');
+
+  // Later fact with the same valid time: a contradiction, not a revision.
+  fact('subject.same', 'same is left', '2026-01-05T00:00:00.000Z', '2026-01-10T00:00:00.000Z');
+  assert.equal(fact('subject.same', 'same is right', '2026-01-05T00:00:00.000Z', '2026-01-05T00:00:00.000Z').status, 'active');
+
+  closeAndDelete(store, dbPath);
+});
+
 test('context-aware R1/R2 precedence: prod and staging coexistence', () => {
   const dbPath = tempDbPath('contexts');
   const store = new MemoryStore({ dbPath, clock: fixedClock('2026-08-20T00:00:00.000Z') });
@@ -490,6 +553,22 @@ test('insertion-order invariance for equivalent candidate permutations', () => {
   const second = runAndSortSnapshot('perm.subject', [events[1], events[0], events[3], events[2]]);
 
   assert.deepEqual(first, second);
+});
+
+test('out-of-order writes converge to the same state as in-order writes', () => {
+  const event = (text: string, day: string): MemoryInput => ({
+    kind: 'fact',
+    subjectKey: 'order.tier',
+    text,
+    validFrom: `2026-01-${day}T00:00:00.000Z`,
+    writtenAt: `2026-01-${day}T00:00:00.000Z`,
+    confidence: 0.8
+  });
+  const [bronze, silver, gold] = [event('tier is bronze', '01'), event('tier is silver', '05'), event('tier is gold', '10')];
+
+  const inOrder = runAndSortSnapshot('order.tier', [bronze, silver, gold]);
+  assert.deepEqual(runAndSortSnapshot('order.tier', [bronze, gold, silver]), inOrder);
+  assert.deepEqual(runAndSortSnapshot('order.tier', [gold, silver, bronze]), inOrder);
 });
 
 test('conflict planning is pure and deterministic with multi-candidate set', () => {
