@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { test } from 'node:test';
 
-import { MemoryStore } from '../src/store.ts';
+import { MemoryStore, SCHEMA_VERSION } from '../src/store.ts';
 import { buildSafeFtsMatch } from '../src/utils.ts';
 import { deterministicCandidateOrder, resolveConflictPlan } from '../src/conflict.ts';
 import { normalizeIncomingMemory } from '../src/memory.ts';
@@ -626,6 +626,59 @@ test('FTS index stays consistent when memories are updated or deleted', () => {
   assert.equal(store.queryFacts('original', asOf).length, 0);
   assert.equal(store.queryFacts('revised', asOf)[0]?.id, edited.id);
   assert.equal(store.queryFacts('doomed', asOf).length, 0);
+
+  closeAndDelete(store, dbPath);
+});
+
+test('init migrates a legacy text-only FTS index to subject-aware recall', () => {
+  const dbPath = tempDbPath('migrate-fts');
+  const legacy = new MemoryStore({ dbPath, clock: fixedClock('2026-03-03T00:00:00.000Z') });
+  legacy.init();
+  legacy.insertFact({
+    kind: 'fact',
+    subjectKey: 'legacy.cadence',
+    text: 'weekly',
+    validFrom: '2026-01-01T00:00:00.000Z',
+    writtenAt: '2026-01-01T00:00:00.000Z',
+    confidence: 0.8
+  });
+
+  // Recreate the schema engram shipped before subject keys were indexed.
+  legacy.rawConnection().exec(`
+    DROP TRIGGER memories_fts_ai;
+    DROP TRIGGER memories_fts_ad;
+    DROP TRIGGER memories_fts_au;
+    DROP TABLE memories_fts;
+    CREATE VIRTUAL TABLE memories_fts USING fts5(text, content='memories', content_rowid='rowid');
+    CREATE TRIGGER memories_fts_ai AFTER INSERT ON memories BEGIN
+      INSERT INTO memories_fts(rowid, text) VALUES (new.rowid, new.text);
+    END;
+    INSERT INTO memories_fts(memories_fts) VALUES ('rebuild');
+    PRAGMA user_version = 0;
+  `);
+  assert.equal(legacy.queryFacts('cadence', '2026-02-01T00:00:00.000Z').length, 0);
+  legacy.close();
+
+  const store = new MemoryStore({ dbPath, clock: fixedClock('2026-03-03T00:00:00.000Z') });
+  store.init();
+  const db = store.rawConnection();
+
+  assert.equal((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version, SCHEMA_VERSION);
+  db.exec("INSERT INTO memories_fts(memories_fts, rank) VALUES ('integrity-check', 1)");
+  assert.equal(store.queryFacts('cadence', '2026-02-01T00:00:00.000Z')[0]?.text, 'weekly');
+
+  closeAndDelete(store, dbPath);
+});
+
+test('init refuses a database written by a newer schema version', () => {
+  const dbPath = tempDbPath('migrate-newer');
+  const first = new MemoryStore({ dbPath, clock: fixedClock('2026-03-03T00:00:00.000Z') });
+  first.init();
+  first.rawConnection().exec(`PRAGMA user_version = ${SCHEMA_VERSION + 1}`);
+  first.close();
+
+  const store = new MemoryStore({ dbPath, clock: fixedClock('2026-03-03T00:00:00.000Z') });
+  assert.throws(() => store.init(), /newer than this engram/);
 
   closeAndDelete(store, dbPath);
 });

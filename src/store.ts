@@ -63,6 +63,31 @@ const QUALIFIED_MEMORY_COLUMNS = MEMORY_COLUMN_NAMES.map((column) => `memories.$
 const INSERT_MEMORY_SQL = `INSERT INTO memories (${MEMORY_COLUMNS}) VALUES (${MEMORY_COLUMN_NAMES.map(() => '?').join(', ')})`;
 const SELECT_MEMORY_BY_ID_SQL = `SELECT rowid, ${MEMORY_COLUMNS} FROM memories WHERE id = ?`;
 
+/** Bump when the schema changes, and add the migration step that reaches it. */
+export const SCHEMA_VERSION = 1;
+
+const FTS_SCHEMA_SQL = `
+  -- subject_key is indexed with text so recall can match a fact by its subject
+  -- (e.g. "review" finds subject.review) even when the wording differs.
+  CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts
+    USING fts5(subject_key, text, content='memories', content_rowid='rowid');
+
+  CREATE TRIGGER IF NOT EXISTS memories_fts_ai AFTER INSERT ON memories BEGIN
+    INSERT INTO memories_fts(rowid, subject_key, text) VALUES (new.rowid, new.subject_key, new.text);
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS memories_fts_ad AFTER DELETE ON memories BEGIN
+    INSERT INTO memories_fts(memories_fts, rowid, subject_key, text)
+      VALUES ('delete', old.rowid, old.subject_key, old.text);
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS memories_fts_au AFTER UPDATE OF subject_key, text ON memories BEGIN
+    INSERT INTO memories_fts(memories_fts, rowid, subject_key, text)
+      VALUES ('delete', old.rowid, old.subject_key, old.text);
+    INSERT INTO memories_fts(rowid, subject_key, text) VALUES (new.rowid, new.subject_key, new.text);
+  END;
+`;
+
 /**
  * node:sqlite returns untyped records; the selected columns define their shape.
  * These helpers keep that single unchecked cast in one place.
@@ -217,29 +242,52 @@ export class MemoryStore {
         ON resolutions(incoming_id);
       CREATE INDEX IF NOT EXISTS idx_resolutions_existing
         ON resolutions(existing_id);
-
-      -- subject_key is indexed with text so recall can match a fact by its subject
-      -- (e.g. "review" finds subject.review) even when the wording differs.
-      CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts
-        USING fts5(subject_key, text, content='memories', content_rowid='rowid');
     `);
+
+    this.db.exec(FTS_SCHEMA_SQL);
+    this.migrate();
+  }
+
+  /**
+   * Upgrades databases created by earlier versions. Fresh databases are created
+   * at the latest shape above, and each step checks the actual schema, so the
+   * steps are no-ops there and only the version number is recorded.
+   */
+  private migrate(): void {
+    const current = getRow<{ user_version: number }>(this.db.prepare('PRAGMA user_version'))?.user_version ?? 0;
+    if (current > SCHEMA_VERSION) {
+      throw new Error(`database schema v${current} is newer than this engram (v${SCHEMA_VERSION})`);
+    }
+    if (current === SCHEMA_VERSION) {
+      return;
+    }
+
+    this.withTransaction(() => {
+      if (current < 1) {
+        this.migrateToSubjectIndexedFts();
+      }
+      this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+    });
+  }
+
+  /** v1: memories_fts indexes subject_key as well as text; earlier databases indexed text only. */
+  private migrateToSubjectIndexedFts(): void {
+    const columns = allRows<{ name: string }>(
+      this.db.prepare('SELECT name FROM pragma_table_info(?)'),
+      'memories_fts'
+    ).map((column) => column.name);
+    if (columns.includes('subject_key')) {
+      return;
+    }
 
     this.db.exec(`
-      CREATE TRIGGER IF NOT EXISTS memories_fts_ai AFTER INSERT ON memories BEGIN
-        INSERT INTO memories_fts(rowid, subject_key, text) VALUES (new.rowid, new.subject_key, new.text);
-      END;
-
-      CREATE TRIGGER IF NOT EXISTS memories_fts_ad AFTER DELETE ON memories BEGIN
-        INSERT INTO memories_fts(memories_fts, rowid, subject_key, text)
-          VALUES ('delete', old.rowid, old.subject_key, old.text);
-      END;
-
-      CREATE TRIGGER IF NOT EXISTS memories_fts_au AFTER UPDATE OF subject_key, text ON memories BEGIN
-        INSERT INTO memories_fts(memories_fts, rowid, subject_key, text)
-          VALUES ('delete', old.rowid, old.subject_key, old.text);
-        INSERT INTO memories_fts(rowid, subject_key, text) VALUES (new.rowid, new.subject_key, new.text);
-      END;
+      DROP TRIGGER IF EXISTS memories_fts_ai;
+      DROP TRIGGER IF EXISTS memories_fts_ad;
+      DROP TRIGGER IF EXISTS memories_fts_au;
+      DROP TABLE memories_fts;
     `);
+    this.db.exec(FTS_SCHEMA_SQL);
+    this.db.exec("INSERT INTO memories_fts(memories_fts) VALUES ('rebuild')");
   }
 
   public close(): void {
