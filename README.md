@@ -37,6 +37,11 @@ as the insert. Governed contradiction detection reports unresolved
 conflicts only: a pair resolved by R1 supersession is no longer reported,
 whereas a flagged same-time conflict is.
 
+Writes are expected in write-time order per subject. A backdated write is
+resolved against what was known at its `writtenAt`, so it correctly
+supersedes older history. But it is not re-checked against facts recorded
+earlier that are effective later and would supersede it in turn.
+
 ## API
 
 ```ts
