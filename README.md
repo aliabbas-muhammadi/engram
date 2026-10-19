@@ -153,6 +153,5 @@ valid-time read path.
 
 ## License
 
-All rights reserved. The source is published for reference and evaluation;
-see [`LICENSE`](LICENSE). engram was developed inside its author's portfolio
-repository and extracted here with its full commit history.
+[MIT](LICENSE). engram was developed inside its author's portfolio repository
+and extracted here with its full commit history.
