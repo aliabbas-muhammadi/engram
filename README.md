@@ -150,3 +150,9 @@ valid-time read path.
   rather than same-time contradictions.
 - Recall is lexical (FTS5 with implicit AND), so a query must share every term
   with a fact to find it.
+
+## License
+
+All rights reserved. The source is published for reference and evaluation;
+see [`LICENSE`](LICENSE). engram was developed inside its author's portfolio
+repository and extracted here with its full commit history.
