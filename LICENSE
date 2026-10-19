@@ -1,0 +1,17 @@
+Copyright (c) 2026 Ali Abbas al-Muhammadi. All rights reserved.
+
+This repository contains the source code, tests and benchmark for engram. It
+is published for reference and review only.
+
+You MAY:
+  - View and read the source for learning and evaluation;
+  - Run it locally to evaluate it.
+
+You MAY NOT, without prior written permission:
+  - Copy, reproduce, or redistribute this code;
+  - Use it, in whole or in substantial part, in another product or service;
+  - Create derivative works from the code, tests, benchmark or documentation.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.

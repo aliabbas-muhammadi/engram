@@ -1,7 +1,13 @@
 {
   "name": "engram",
   "version": "0.1.0",
+  "description": "A governed, bitemporal memory store for agents, on Node’s built-in SQLite.",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aliabbas-muhammadi/engram.git"
+  },
   "type": "module",
   "engines": {
     "node": ">=22.13"
