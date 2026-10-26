@@ -136,7 +136,8 @@ preserved replacement link; it cannot recover an earlier link that was lost.
 
 ## Benchmark
 
-`bench/timeline.json` replays 29 events into three arms and scores 27 queries:
+`bench/timeline.json` replays 34 events into three arms and scores 32 queries,
+including scheduled revisions and the exact 0.1 confidence boundary:
 
 - **governed**: engram as shipped.
 - **baseline**: a typical append-only agent memory. A fact is known once it is
@@ -146,16 +147,16 @@ preserved replacement link; it cannot recover an earlier link that was lost.
 
 | Metric | Governed | Baseline | Sabotage |
 | --- | --- | --- | --- |
-| Correct answer, including "nothing known" | 19/19 | 11/19 | 11/19 |
-| Stale fact returned (lower is better) | 0/6 | 3/6 | 3/6 |
+| Correct answer, including "nothing known" | 24/24 | 13/24 | 15/24 |
+| Stale fact returned (lower is better) | 0/7 | 4/7 | 4/7 |
 | Contradiction recall | 3/3 | 3/3 | 3/3 |
 | Contradiction precision | 3/5 | 3/8 | 3/8 |
 | Experience recall | 4/4 | 4/4 | 4/4 |
 
 `MEM_GATE` requires a stale-recall improvement over the baseline of at least
 15 points, contradiction recall of at least 80%, and correct answers to every
-golden fact and experience query, with neither category empty. The governed store passes
-(50-point improvement, 100% recall). The sabotage arm fails, which shows the
+golden fact and experience query, with neither category empty. The governed
+store passes (57.14-point improvement, 100% recall). The sabotage arm fails, which shows the
 stale-recall gain comes from supersession at write time, not from the
 valid-time read path.
 
@@ -165,7 +166,7 @@ valid-time read path.
   query's as-of time. A same-time rival that is less confident, or that arrived
   later, is contested rather than current.
 - **Stale probes:** each lists the facts that are outdated at its as-of time.
-  - Three are phrased in outdated terms ("beta region us-east" after the move
+  - Four are phrased in outdated terms ("beta region us-east" after the move
     to us-west). The right answer is no fact, because the stale fact is
     exactly what a naive memory returns.
 - **Contradictions:** two incompatible facts in the same subject and scope with
