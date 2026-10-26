@@ -407,12 +407,6 @@ export class MemoryStore {
   private insertWithGovernedRules(input: MemoryInput): InsertResult {
     const memory = normalizeIncomingMemory(input);
 
-    if (memory.derivedFrom && memory.derivedFrom.length > 0) {
-      const derivedFrom = parseDerivedFrom(memory.derivedFrom);
-      this.validateDerivedFromExists(memory.id, derivedFrom);
-      this.validateDerivedFromAcyclic(memory.id, derivedFrom);
-    }
-
     const existing = getRow<MemoryRow>(this.statement(SELECT_MEMORY_BY_ID_SQL), memory.id);
     if (existing) {
       return {
@@ -422,6 +416,12 @@ export class MemoryStore {
         duplicateOf: existing.id,
         message: 'exact duplicate key; preserving prior provenance'
       };
+    }
+
+    if (memory.derivedFrom && memory.derivedFrom.length > 0) {
+      const derivedFrom = parseDerivedFrom(memory.derivedFrom);
+      this.validateDerivedFromExists(memory.id, derivedFrom);
+      this.validateDerivedFromAcyclic(memory.id, derivedFrom);
     }
 
     const candidates = this.loadCandidatesForGovernance(memory.subjectKey, memory.writtenAt);
