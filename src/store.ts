@@ -497,7 +497,7 @@ export class MemoryStore {
     // supersession (a contested fact stays flagged, not active).
     const rows = allRows<MemoryRow>(
       this.db.prepare(`
-        SELECT rowid, ${MEMORY_COLUMNS}
+        SELECT rowid, ${MEMORY_COLUMN_NAMES.map((column) => column === 'status' ? 'status_as_of AS status' : column).join(', ')}
         FROM (
           SELECT memories.rowid AS rowid, ${QUALIFIED_MEMORY_COLUMNS},
             bm25(memories_fts) AS relevance,
