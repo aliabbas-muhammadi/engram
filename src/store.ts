@@ -496,9 +496,16 @@ export class MemoryStore {
     // Filter and rank on each fact's status as of `asOf`: a fact superseded
     // later was still in effect then, with the status it held before
     // supersession (a contested fact stays flagged, not active).
+    const asOfColumns = MEMORY_COLUMN_NAMES.map((column) => {
+      if (column === 'status') return 'status_as_of AS status';
+      if (column === 'superseded_by' || column === 'superseded_at') {
+        return `CASE WHEN status_as_of != status THEN NULL ELSE ${column} END AS ${column}`;
+      }
+      return column;
+    }).join(', ');
     const rows = allRows<MemoryRow>(
       this.db.prepare(`
-        SELECT rowid, ${MEMORY_COLUMN_NAMES.map((column) => column === 'status' ? 'status_as_of AS status' : column).join(', ')}
+        SELECT rowid, ${asOfColumns}
         FROM (
           SELECT memories.rowid AS rowid, ${QUALIFIED_MEMORY_COLUMNS},
             bm25(memories_fts) AS relevance,
