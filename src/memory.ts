@@ -39,7 +39,7 @@ export function normalizeIncomingMemory(input: MemoryInput): MemoryRecord {
     status: input.status ?? 'active',
     supersededBy: null,
     supersededAt: null,
-    contextTag: input.contextTag?.trim() ?? null
+    contextTag: input.contextTag?.trim() || null
   };
 }
 
