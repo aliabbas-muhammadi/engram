@@ -6,7 +6,7 @@ import { buildExperienceSubject, buildExperienceText } from './conflict.ts';
 
 function stableJson(value: Record<string, unknown>): string {
   const keys = Object.keys(value).sort();
-  const normalized: Record<string, unknown> = {};
+  const normalized: Record<string, unknown> = Object.create(null);
   for (const key of keys) {
     normalized[key] = value[key];
   }
