@@ -20,7 +20,7 @@ export function assertIsoUtcTimestamp(input: string): ParsedTimestamp {
   }
 
   const parsed = new Date(input);
-  if (!Number.isFinite(parsed.getTime())) {
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 19) !== input.slice(0, 19)) {
     throw new Error(`invalid timestamp: ${input}`);
   }
 
