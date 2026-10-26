@@ -83,7 +83,7 @@ export function resolveConflictPlan(
   decisionTs: string,
   options: ConflictOptions = {}
 ): ResolutionPlan {
-  const candidates = deterministicCandidateOrder(allCandidates.filter((candidate) => candidate.id !== incoming.id));
+  const candidates = deterministicCandidateOrder(allCandidates);
 
   const steps = candidates.map<
     { existingId: string; action: 'retain' | 'contextualize' | 'supersede' | 'flag'; rule: ResolutionRule; details: string }
@@ -106,11 +106,11 @@ export function resolveConflictPlan(
   );
 
   const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
-  if (byId.has(incoming.id)) {
-    const duplicate = byId.get(incoming.id);
+  const duplicate = byId.get(incoming.id);
+  if (duplicate) {
     return {
       incomingId: incoming.id,
-      incomingStatus: incoming.status,
+      incomingStatus: duplicate.status,
       incomingIsDuplicate: true,
       steps: [
         {
