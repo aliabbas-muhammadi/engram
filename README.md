@@ -106,8 +106,10 @@ caches the two statements every insert runs.
 
 ## Development
 
-Requires Node 22.13+ (for `node:sqlite` and type stripping). Sources run
-directly as TypeScript; there is no build step.
+Requires Node 22.16+ with SQLite FTS5 and type stripping. Earlier official
+Node 22 builds expose `node:sqlite` but lack the search extension; it is enabled
+in the [Node 22.16 SQLite build](https://github.com/nodejs/node/blob/v22.16.0/deps/sqlite/sqlite.gyp).
+Sources run directly as TypeScript; there is no build step.
 
 ```bash
 npm ci
@@ -119,7 +121,7 @@ MEM_GATE=1 npm run bench              # enforce the quality gate
 ```
 
 CI runs the typecheck, the tests, the benchmark gate and the determinism check
-on every pull request.
+on every pull request, using Node 22.16.0 and current Node 22, 24, and 26 builds.
 
 `MemoryStore.init()` upgrades older database schemas. It rejects schemas from
 newer versions before changing their journal mode or creating any tables,
