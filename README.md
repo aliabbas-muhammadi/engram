@@ -72,6 +72,22 @@ store.detectContradictions('gamma runtime', '2026-01-15T00:00:00.000Z', { mode: 
 `recordOutcome` / `retrieveExperience` store and recall action outcomes as
 append-only experiences.
 
+### Input validation
+
+Timestamps must be ISO-8601 UTC strings ending in `Z`, with real calendar
+dates and hours from `00` through `23`. Invalid dates such as February 29 in
+a non-leap year are rejected rather than rolled into March. Accepted timestamps
+are normalized to millisecond precision; additional fractional digits are
+truncated.
+
+Recall limits must be non-negative safe integers. Zero returns no results;
+negative, fractional, non-finite, and unsafe integer limits throw an error.
+This applies to `RecallService.recallAsOf` / `recallNow`,
+`MemoryStore.queryExperiences`, and `retrieveExperience`.
+
+Experience parameters are serialized with sorted top-level keys, including
+own keys named `__proto__`. Nested object keys retain their supplied order.
+
 ## Performance
 
 Each governed insert is its own transaction, so commit durability dominates
