@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { DatabaseSync, type SQLInputValue, type StatementSync } from 'node:sqlite';
 
 import type {
@@ -72,11 +73,11 @@ const SUPERSEDE_SQL = `
     status = 'superseded',
     superseded_by = ?,
     superseded_at = ?
-  WHERE id = ?
+  WHERE id = ? AND (superseded_at IS NULL OR superseded_at > ?)
 `;
 
 /** Bump when the schema changes, and add the migration step that reaches it. */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 const FTS_SCHEMA_SQL = `
   -- subject_key is indexed with text so recall can match a fact by its subject
@@ -184,8 +185,23 @@ export class MemoryStore {
 
   public constructor(options: StoreOptions) {
     this.options = options;
-    this.db = new DatabaseSync(options.dbPath);
     this.clock = options.clock ?? systemClock;
+    const existingFile = options.dbPath !== ':memory:' && existsSync(options.dbPath);
+    this.db = new DatabaseSync(options.dbPath, { readOnly: existingFile });
+    if (existingFile) {
+      let current: number;
+      try {
+        current = getRow<{ user_version: number }>(this.db.prepare('PRAGMA user_version'))?.user_version ?? 0;
+      } catch (error) {
+        this.db.close();
+        throw error;
+      }
+      // A writable connection can checkpoint a newer database's WAL even on close.
+      if (current <= SCHEMA_VERSION) {
+        this.db.close();
+        this.db = new DatabaseSync(options.dbPath);
+      }
+    }
   }
 
   /**
@@ -288,6 +304,9 @@ export class MemoryStore {
       if (current < 2) {
         this.migrateToPriorStatus();
       }
+      if (current < 3) {
+        this.migrateToEffectiveSupersession();
+      }
       this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     });
   }
@@ -337,6 +356,34 @@ export class MemoryStore {
     return allRows<{ name: string }>(this.db.prepare('SELECT name FROM pragma_table_info(?)'), table).map(
       (column) => column.name
     );
+  }
+
+  /** v3: a replacement must be both known and effective before retiring a fact. */
+  private migrateToEffectiveSupersession(): void {
+    this.db.exec(`
+      UPDATE memories
+      SET (superseded_by, superseded_at) = (
+        SELECT replacement.id, MAX(resolutions.decision_ts, replacement.valid_from)
+        FROM resolutions
+        JOIN memories AS replacement ON replacement.id = resolutions.incoming_id
+        WHERE resolutions.existing_id = memories.id
+          AND resolutions.action = 'supersede' AND resolutions.rule = 'R1_SUPERSEDE'
+        ORDER BY MAX(resolutions.decision_ts, replacement.valid_from), resolutions.decision_ts, replacement.id
+        LIMIT 1
+      )
+      WHERE status = 'superseded' AND EXISTS (
+        SELECT 1 FROM resolutions
+        WHERE resolutions.existing_id = memories.id
+          AND resolutions.action = 'supersede' AND resolutions.rule = 'R1_SUPERSEDE'
+      );
+
+      UPDATE memories
+      SET superseded_at = (
+        SELECT MAX(memories.superseded_at, replacement.valid_from, replacement.written_at)
+        FROM memories AS replacement WHERE replacement.id = memories.superseded_by
+      )
+      WHERE status = 'superseded' AND superseded_at IS NOT NULL AND superseded_by IS NOT NULL;
+    `);
   }
 
   public close(): void {
@@ -734,7 +781,7 @@ export class MemoryStore {
 
     const updateSupersede = this.db.prepare(SUPERSEDE_SQL);
     for (const link of plan.supersessionLinks) {
-      updateSupersede.run(link.supersededBy, link.supersededAt, link.existingId);
+      updateSupersede.run(link.supersededBy, link.supersededAt, link.existingId, link.supersededAt);
     }
   }
 
@@ -742,7 +789,7 @@ export class MemoryStore {
    * A backdated write is planned against what was known at its own writtenAt.
    * Facts already stored that were written after it and take effect later
    * would have superseded it had it arrived on time; apply that now, as of
-   * the superseding fact's write time.
+   * the later of the superseding fact's write and valid times.
    */
   private applyLaterSupersession(memory: MemoryRecord): MemoryRecord | null {
     const laterWrites = allRows<MemoryRow>(
@@ -765,7 +812,8 @@ export class MemoryStore {
       return null;
     }
 
-    this.db.prepare(SUPERSEDE_SQL).run(superseder.id, superseder.writtenAt, memory.id);
+    const supersededAt = superseder.validFrom > superseder.writtenAt ? superseder.validFrom : superseder.writtenAt;
+    this.db.prepare(SUPERSEDE_SQL).run(superseder.id, supersededAt, memory.id, supersededAt);
     this.insertResolutionLogs([
       {
         incomingId: superseder.id,

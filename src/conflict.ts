@@ -296,7 +296,7 @@ export function resolveConflictPlan(
     supersessionLinks.push({
       existingId: candidate.id,
       supersededBy: incoming.id,
-      supersededAt: incoming.writtenAt
+      supersededAt: incoming.validFrom > incoming.writtenAt ? incoming.validFrom : incoming.writtenAt
     });
   }
 

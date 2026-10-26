@@ -13,6 +13,9 @@ logged rule rather than by "latest write wins".
   in effect at `asOf`. A fact superseded after `asOf` is still returned for
   that time, with the status it held then (a contested fact stays flagged),
   so history stays queryable.
+- **Scheduled revisions** take over only once they are both known and effective.
+  Learning a future revision does not hide the current fact early, and later
+  revisions do not postpone an earlier replacement.
 - **Recall** matches the query against both `subjectKey` and `text`.
 - **Duplicates** are idempotent: a memory's id is a SHA-256 of
   `(subjectKey, text, validFrom)`, and re-inserting keeps the first provenance.
@@ -125,7 +128,11 @@ on every pull request, using Node 22.16.0 and current Node 22, 24, and 26 builds
 
 `MemoryStore.init()` upgrades older database schemas. It rejects schemas from
 newer versions before changing their journal mode or creating any tables,
-indexes, or triggers, leaving the database unchanged.
+indexes, or triggers. The main database and WAL contents remain unchanged;
+SQLite may update shared-memory bookkeeping while reading the version.
+Schema v3 repairs early supersession times and recovers the earliest replacement
+from R1 audit history. Without that history, it corrects the timing of the
+preserved replacement link; it cannot recover an earlier link that was lost.
 
 ## Benchmark
 
