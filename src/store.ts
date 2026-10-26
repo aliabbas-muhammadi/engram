@@ -202,6 +202,11 @@ export class MemoryStore {
   }
 
   public init(): void {
+    const current = getRow<{ user_version: number }>(this.db.prepare('PRAGMA user_version'))?.user_version ?? 0;
+    if (current > SCHEMA_VERSION) {
+      throw new Error(`database schema v${current} is newer than this engram (v${SCHEMA_VERSION})`);
+    }
+
     this.db.exec('PRAGMA foreign_keys = ON');
     // Never OFF: withTransaction relies on ROLLBACK, which SQLite leaves
     // undefined when the journal is disabled.
@@ -263,7 +268,7 @@ export class MemoryStore {
     `);
 
     this.db.exec(FTS_SCHEMA_SQL);
-    this.migrate();
+    this.migrate(current);
   }
 
   /**
@@ -271,11 +276,7 @@ export class MemoryStore {
    * at the latest shape above, and each step checks the actual schema, so the
    * steps are no-ops there and only the version number is recorded.
    */
-  private migrate(): void {
-    const current = getRow<{ user_version: number }>(this.db.prepare('PRAGMA user_version'))?.user_version ?? 0;
-    if (current > SCHEMA_VERSION) {
-      throw new Error(`database schema v${current} is newer than this engram (v${SCHEMA_VERSION})`);
-    }
+  private migrate(current: number): void {
     if (current === SCHEMA_VERSION) {
       return;
     }

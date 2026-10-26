@@ -121,6 +121,10 @@ MEM_GATE=1 npm run bench              # enforce the quality gate
 CI runs the typecheck, the tests, the benchmark gate and the determinism check
 on every pull request.
 
+`MemoryStore.init()` upgrades older database schemas. It rejects schemas from
+newer versions before changing their journal mode or creating any tables,
+indexes, or triggers, leaving the database unchanged.
+
 ## Benchmark
 
 `bench/timeline.json` replays 29 events into three arms and scores 27 queries:
