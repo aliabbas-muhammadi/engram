@@ -590,7 +590,7 @@ export class MemoryStore {
       ? 'AND (memories.status != \'superseded\' OR (memories.superseded_at IS NOT NULL AND memories.superseded_at > ?))'
       : '';
 
-    const params: (string | number)[] = [safeQuery, canonicalAsOf, canonicalAsOf];
+    const params: (string | number)[] = [safeQuery, canonicalAsOf, canonicalAsOf, canonicalAsOf, canonicalAsOf];
     if (governed) {
       params.push(canonicalAsOf);
     }
@@ -609,6 +609,8 @@ export class MemoryStore {
             JOIN memories_fts ON memories_fts.rowid = matched.rowid
             WHERE matched.kind = 'fact'
               AND memories_fts MATCH ?
+              AND matched.written_at <= ?
+              AND matched.valid_from <= ?
           )
           AND memories.written_at <= ?
           AND memories.valid_from <= ?
