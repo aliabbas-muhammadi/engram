@@ -227,7 +227,7 @@ export function resolveConflictPlan(
 
   const confidenceFloor = options.supersedeIfLowerConfidence ?? LOW_CONFIDENCE_DELTA;
   const hasLowConfidenceIncoming = sameScopeConflicts.some(
-    (candidate) => incoming.confidence + confidenceFloor < candidate.confidence
+    (candidate) => incoming.confidence + confidenceFloor + Number.EPSILON < candidate.confidence
   );
 
   if (hasLowConfidenceIncoming) {
@@ -337,7 +337,7 @@ export function findLaterSuperseder(
         isSameScopeContext(candidate.contextTag, incoming.contextTag) &&
         areTextIncompatible(candidate.text, incoming.text) &&
         compareDateString(candidate.validFrom, incoming.validFrom) > 0 &&
-        !(candidate.confidence + confidenceFloor < incoming.confidence)
+        !(candidate.confidence + confidenceFloor + Number.EPSILON < incoming.confidence)
     ) ?? null
   );
 }
