@@ -456,6 +456,15 @@ export function assertGate(governed: ArmResult, appendOnly: ArmResult): void {
   if (governedConRecall < 0.8) {
     throw new Error(`MEM_GATE failed: contradiction recall ${(governedConRecall * 100).toFixed(2)}% < 80%`);
   }
+
+  for (const [label, metric] of [
+    ['correct recall', governed.metrics.correctRecall],
+    ['experience recall', governed.metrics.experienceRecall]
+  ] as const) {
+    if (metric.queries <= 0 || metric.correct !== metric.queries) {
+      throw new Error(`MEM_GATE failed: ${label} must answer every golden query correctly (${metric.correct}/${metric.queries})`);
+    }
+  }
 }
 
 export function printSummary(result: BenchResult): string {

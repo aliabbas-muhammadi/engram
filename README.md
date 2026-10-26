@@ -153,7 +153,8 @@ preserved replacement link; it cannot recover an earlier link that was lost.
 | Experience recall | 4/4 | 4/4 | 4/4 |
 
 `MEM_GATE` requires a stale-recall improvement over the baseline of at least
-15 points and contradiction recall of at least 80%. The governed store passes
+15 points, contradiction recall of at least 80%, and correct answers to every
+golden fact and experience query, with neither category empty. The governed store passes
 (50-point improvement, 100% recall). The sabotage arm fails, which shows the
 stale-recall gain comes from supersession at write time, not from the
 valid-time read path.

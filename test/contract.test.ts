@@ -911,6 +911,22 @@ test('benchmarks run with honest baseline, deterministic hashes, and gate behavi
   );
 });
 
+for (const metric of ['correctRecall', 'experienceRecall'] as const) {
+  for (const empty of [false, true]) {
+    test(`the benchmark gate rejects ${empty ? 'missing coverage' : 'wrong answers'} in ${metric}`, () => {
+      const result = runBenchmark(loadDataset(process.cwd()));
+      const degraded = structuredClone(result.governed);
+      if (empty) {
+        degraded.metrics[metric] = { queries: 0, correct: 0 };
+      } else {
+        degraded.metrics[metric].correct -= 1;
+      }
+      assert.throws(() => assertGate(degraded, result.appendOnly), /MEM_GATE failed/);
+      assert.doesNotThrow(() => assertGate(result.governed, result.appendOnly));
+    });
+  }
+}
+
 test('transaction rollback preserves store state when resolution log insert fails', () => {
   const dbPath = tempDbPath('rollback');
   const store = new MemoryStore({ dbPath, clock: fixedClock('2026-06-01T00:00:00.000Z') });
