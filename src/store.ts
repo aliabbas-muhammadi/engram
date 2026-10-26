@@ -15,7 +15,7 @@ import type {
 import { type Clock, systemClock } from './clock.ts';
 import { resolveConflictPlan, deterministicCandidateOrder, findLaterSuperseder } from './conflict.ts';
 import { normalizeIncomingMemory } from './memory.ts';
-import { assertIsoUtcTimestamp, buildSafeFtsMatch, toCanonicalText } from './utils.ts';
+import { assertIsoUtcTimestamp, assertRecallLimit, buildSafeFtsMatch, toCanonicalText } from './utils.ts';
 
 interface MemoryRow {
   rowid: number;
@@ -540,6 +540,7 @@ export class MemoryStore {
     asOf: string,
     limit = 10
   ): Array<MemoryRecord & { score: number }> {
+    assertRecallLimit(limit);
     const canonicalAsOf = assertIsoUtcTimestamp(asOf).value;
     const safeQuery = buildSafeFtsMatch(query);
     if (!safeQuery) {

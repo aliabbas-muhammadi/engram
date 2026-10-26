@@ -1,6 +1,6 @@
 import { MemoryStore } from './store.ts';
 import { type Clock, systemClock } from './clock.ts';
-import { assertIsoUtcTimestamp } from './utils.ts';
+import { assertIsoUtcTimestamp, assertRecallLimit } from './utils.ts';
 import type { MemoryRecord } from './types.ts';
 
 export interface RecallCandidate {
@@ -18,6 +18,7 @@ export class RecallService {
   }
 
   public recallAsOf(query: string, asOf: string, limit = 1): RecallCandidate[] {
+    assertRecallLimit(limit);
     const canonicalAsOf = assertIsoUtcTimestamp(asOf).value;
 
     const rows = this.store.queryFacts(query, canonicalAsOf, ['active', 'contextual']);

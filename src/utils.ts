@@ -39,6 +39,12 @@ export function normalizeConfidence(confidence: number): number {
   return Number(confidence.toFixed(6));
 }
 
+export function assertRecallLimit(limit: number): void {
+  if (!Number.isSafeInteger(limit) || limit < 0) {
+    throw new Error('limit must be a non-negative safe integer');
+  }
+}
+
 export function stableMemoryId(subjectKey: string, text: string, validFrom: string): string {
   const payload = JSON.stringify([
     String(subjectKey).trim(),
